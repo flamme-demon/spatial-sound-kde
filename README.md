@@ -10,7 +10,15 @@ The principle is the same as those products: a 7.1 output device appears on the
 system, each virtual speaker is convolved with a pair of measured head-related
 impulse responses (HRIR), and the result is mixed down to stereo for headphones.
 
+<p align="center">
+  <img src="docs/applet.png" alt="The Plasma applet listing profiles with their measurements" width="380">
+</p>
+
 ## What it actually does
+
+The virtual device shows up as a genuine 7.1 card, with its eight channels:
+
+![The 7.1 sink in KDE audio settings](docs/kde-audio-settings.png)
 
 Games and video players see a 7.1 sound card and send it a genuine multichannel
 stream. Instead of a plain stereo downmix, every channel is placed in space around

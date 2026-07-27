@@ -10,7 +10,15 @@ Le principe est le même que ces produits : un périphérique de sortie 7.1 appa
 dans le système, chaque enceinte virtuelle est convoluée par une paire de réponses
 impulsionnelles (HRIR) mesurées, et le résultat est mixé en stéréo pour le casque.
 
+<p align="center">
+  <img src="docs/applet.png" alt="L'applet Plasma listant les profils avec leurs mesures" width="380">
+</p>
+
 ## Ce que ça fait concrètement
+
+Le périphérique virtuel apparaît comme une vraie carte 7.1, avec ses huit canaux :
+
+![Le sink 7.1 dans les réglages audio de KDE](docs/kde-audio-settings.png)
 
 Les jeux et lecteurs vidéo voient une carte son 7.1 et lui envoient un vrai flux
 multicanal. Au lieu d'un simple repli stéréo, chaque canal est placé dans l'espace
