@@ -44,16 +44,41 @@ FIR à phase minimale, 1024 points, WAV mono 44,1 kHz, couvrant AKG, Audeze,
 Audio-Technica, Beyerdynamic, HiFiMAN, Sennheiser et d'autres.
 Alternative : [AutoEQ](https://autoeq.app/).
 
-### À vérifier avant d'implémenter
+### Verifie le 2026-07-28
 
-- [ ] **Le HyperX Cloud Flight S est-il mesuré** dans AutoEQ ou ASH ? Les casques de
-      jeu sans fil y sont mal couverts. Sans mesure du modèle, la fonctionnalité
-      existe mais ne sert à personne ici.
-- [ ] Rééchantillonnage 44,1 → 48 kHz nécessaire, ou le convolueur PipeWire s'en
-      charge-t-il ?
+- [x] **Le HyperX Cloud Flight S est mesure.** Present dans AutoEQ, mesure Rtings
+      (HMS II.3), sous `results/Rtings/HMS II.3 over-ear/HyperX Cloud Flight S/`.
+- [x] **Pas de reechantillonnage a prevoir** : AutoEQ publie un FIR a phase minimale
+      directement en **48 kHz**, notre frequence. Fichier WAV stereo, 4800
+      echantillons (100 ms), 16 bits.
+      Reponse mesuree du filtre : +4,8 dB dans 200-500 Hz, +4,3 dB dans 3-5 kHz,
+      -3,3 dB au-dessus de 10 kHz. Correction credible pour un casque de jeu au
+      medium creuse et aux aigus chauds.
+- [x] La phase minimale concentre l'energie en debut de reponse : la latence de la
+      convolution partitionnee depend du bloc, pas de la longueur du FIR. Les
+      4800 points n'ajoutent donc pas 100 ms.
+
+### Reste a trancher
 - [ ] Un HpCF mal choisi **dégrade** le son : appliquer une correction DT 990 à un
       autre casque creuse un pic qui n'existe pas. Prévoir un avertissement explicite,
       et surtout ne pas en activer un par défaut.
+- [ ] **Comment distribuer le catalogue.** AutoEQ compte ~700 casques et 52 000
+      fichiers : impossible a embarquer. Deux pistes — generer un index nom -> chemin
+      une fois et telecharger le WAV a la demande, ou se contenter d'un
+      `--hpcf-file <chemin>` que l'utilisateur alimente lui-meme.
+      L'index est le seul moyen d'avoir un menu deroulant utilisable dans l'applet.
+
+### Integration dans l'applet
+
+Le graphe et le script sont la partie facile : deux convolueurs de plus apres le
+mixeur, un symlink `hpcf.wav` sur le modele de `hrir.wav`, et `surround-profil`
+gagne `--hpcf <nom>` / `--hpcf-none`. Le rechargement reste celui du service dedie,
+donc toujours 0,15 s.
+
+Cote applet, la difficulte n'est pas technique mais de mise en page : la liste des
+profils occupe deja toute la hauteur disponible. Un menu deroulant « Casque » dans le
+pied de fenetre, la ou vit la legende, coute une seule ligne et ne touche pas a la
+liste. C'est la piste a suivre — surtout pas une seconde liste.
 
 ---
 
