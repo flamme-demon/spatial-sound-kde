@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Bascule le profil HRIR du sink « Casque Surround 7.1 » et recharge PipeWire.
+set -euo pipefail
+
+HR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
+SINK="effect_input.virtual-surround-7.1-hesuvi"
+
+# Table de reference, mesuree par tools/analyse_hrir.py.
+#   champs : usage | lateralisation dB | reverb ms | commentaire
+#
+#   lateralisation = ecart d'energie entre l'oreille du cote de la source et
+#     l'autre. Critere DECISIF : sous ~3 dB le profil ne place plus rien.
+#   reverb = duree au-dessus de -40 dB ; plus c'est long, plus le son est lointain.
+#
+# Piege : une reponse en frequence tres plate n'est pas un gage de neutralite,
+# c'est le signe que le profil ne filtre rien — donc ne lateralise pas (cf. dvs).
+# Les commentaires sont stockes en anglais : c'est la forme canonique qui sert de
+# cle de traduction, aussi bien pour l'applet Plasma que pour l'affichage ci-dessous.
+declare -A INFO=(
+  [cmss_game]="jeu|15|39|best overall compromise"
+  [sonic]="jeu|11|16|very dry"
+  [EAC_Default]="jeu|9|3|driest of all (44.1 kHz)"
+  [dtshx]="jeu|6|18|dry, less contrasted"
+  [atmos]="film|12|46|spacious, slightly distant"
+  [ssc_ny]="film|9|42|Spatial Sound Card, New York"
+  [ssc_syd]="film|14|99|Spatial Sound Card, Sydney"
+  [ssc_dub]="film|5|74|Spatial Sound Card, Dublin"
+  [gsx]="film|6|77|Sennheiser GSX, coloured"
+  [dh+]="film|3|109|Dolby Headphone, distant"
+  [dvs]="eviter|2|21|does not lateralise"
+)
+ORDRE=(cmss_game sonic EAC_Default dtshx atmos ssc_ny ssc_syd ssc_dub gsx dh+ dvs)
+
+# Traduction de l'affichage terminal. --data reste en anglais : c'est une interface
+# machine, consommee par l'applet qui applique son propre catalogue.
+declare -A FR=(
+  ["best overall compromise"]="le meilleur compromis"
+  ["very dry"]="tres sec"
+  ["driest of all (44.1 kHz)"]="le plus sec (44.1 kHz)"
+  ["dry, less contrasted"]="sec, moins contraste"
+  ["spacious, slightly distant"]="ample, un peu distant"
+  ["Sennheiser GSX, coloured"]="Sennheiser GSX, colore"
+  ["Dolby Headphone, distant"]="Dolby Headphone, lointain"
+  ["does not lateralise"]="ne lateralise pas"
+)
+traduire() {
+  if [[ "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" == fr* && -n "${FR[$1]+x}" ]]; then
+    echo "${FR[$1]}"
+  else
+    echo "$1"
+  fi
+}
+
+[[ -d "$HR" ]] || { echo "Spatial Sound KDE n'est pas installe ($HR absent)." >&2; exit 1; }
+
+actuel() { basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo aucun)" .wav; }
+
+# Sortie TSV pour l'applet Plasma : nom, usage, lat, reverb, commentaire, actif.
+donnees() {
+  local cur; cur="$(actuel)"
+  for k in "${ORDRE[@]}"; do
+    [[ -f "$HR/$k.wav" ]] || continue
+    IFS='|' read -r usage lat rev note <<<"${INFO[$k]}"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$k" "$usage" "$lat" "$rev" "$note" \
+      "$([[ "$k" == "$cur" ]] && echo 1 || echo 0)"
+  done
+}
+
+usage_txt() {
+  printf 'Usage : surround-profil [<profil>|-l|-a|--current|--data|--status]\n\n'
+  printf 'Actuel : \033[1m%s\033[0m\n\n' "$(actuel)"
+  printf '  %-13s %-7s %6s %8s  %s\n' profil usage lat. reverb commentaire
+  for k in "${ORDRE[@]}"; do
+    [[ -f "$HR/$k.wav" ]] || continue
+    IFS='|' read -r us lat rev note <<<"${INFO[$k]}"
+    printf '  %-13s %-7s %5sdB %6sms  %s\n' "$k" "$us" "+$lat" "$rev" "$(traduire "$note")"
+  done
+  printf '\nlat. = capacite a placer les sons dans l espace ; sous 3 dB, inexploitable.\n'
+  printf '  -a  les %s profils installes\n' \
+    "$(find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' | wc -l)"
+}
+
+case "${1-}" in
+  ''|-h|--help|-l) usage_txt; exit 0 ;;
+  --current)       actuel; exit 0 ;;
+  --data)          donnees; exit 0 ;;
+  --status)        pactl list sinks short 2>/dev/null | grep -q "$SINK" \
+                     && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
+  -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
+        | sed 's/\.wav$//' | sort | column; exit 0 ;;
+esac
+
+NEW="$1"
+[[ -f "$HR/$NEW.wav" ]] || { echo "Profil introuvable : $NEW (voir -a)" >&2; exit 1; }
+
+# Seuls les WAV HeSuVi 14 canaux conviennent : les autres casseraient le graphe
+# en silence, sans message d'erreur de PipeWire.
+if command -v ffprobe >/dev/null; then
+  CH="$(ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 "$HR/$NEW.wav")"
+  [[ "$CH" == 14 ]] || { echo "« $NEW » a $CH canaux, il en faut 14." >&2; exit 1; }
+fi
+
+ln -sfn "$HR/$NEW.wav" "$HR/hrir.wav"
+
+# Seule l'instance dediee redemarre : le serveur audio principal n'est pas
+# touche, donc les autres flux (musique, chat, navigateur) ne sont pas coupes.
+# Repli sur le redemarrage complet pour les installations d'avant le service.
+if systemctl --user list-unit-files spatial-sound.service >/dev/null 2>&1 \
+   && [[ -f "$HOME/.config/systemd/user/spatial-sound.service" ]]; then
+  systemctl --user restart spatial-sound.service
+  for _ in $(seq 40); do
+    pactl list sinks short 2>/dev/null | grep -q "$SINK" && break
+    sleep 0.05
+  done
+else
+  systemctl --user restart pipewire pipewire-pulse wireplumber
+  sleep 2
+fi
+if [[ -n "${INFO[$NEW]+x}" ]]; then
+  IFS='|' read -r us lat rev note <<<"${INFO[$NEW]}"
+  printf 'Profil actif : \033[1m%s\033[0m (%s, lat. +%sdB, reverb %sms — %s)\n' \
+    "$NEW" "$us" "$lat" "$rev" "$(traduire "$note")"
+else
+  printf 'Profil actif : \033[1m%s\033[0m\n' "$NEW"
+fi

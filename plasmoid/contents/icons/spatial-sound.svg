@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+  <style type="text/css" id="current-color-scheme">
+    .ColorScheme-Text { color: #232629; }
+  </style>
+  <!--
+    Source rayonnante au centre, deux arcs concentriques autour : le champ
+    sonore qui entoure l'auditeur, dans le vocabulaire visuel d'un systeme
+    solaire vu a plat.
+
+    Deux choix contre-intuitifs, valides par rasterisation a 22 px (la taille
+    reelle dans le panneau) :
+
+    1. Les arcs sont BRISES, pas fermes. Deux cercles concentriques complets
+       autour d'une forme centrale se lisent comme un oeil, le centre faisant
+       pupille. Les ouvertures suppriment cette lecture. Ne pas les fermer.
+    2. Le centre est FESTONNE et plein. Un disque lisse redevient une pupille ;
+       les lobes le font lire comme une source qui rayonne.
+
+    La reference d'origine ajoutait des planetes cerclees et un soleil evide :
+    testes, ils tournent en bouillie des 22 px. Ne pas les reintroduire sans
+    reverifier a cette taille.
+
+    Trace monochrome, utilise en masque (isMask) : Plasma le teinte avec la
+    couleur de texte du panneau, donc il suit les themes clair et sombre.
+  -->
+  <g fill="none" stroke="currentColor" class="ColorScheme-Text" stroke-width="1.5" stroke-linecap="round">
+    <path d="M 5.02 8.21 A 6.6 6.6 0 1 1 9.29 17.38"/>
+    <path d="M 19.52 14.97 A 9.4 9.4 0 1 1 13.43 1.92"/>
+  </g>
+  <path d="M 14.75 11.00 L 14.73 11.12 L 14.67 11.24 L 14.57 11.35 L 14.45 11.45 L 14.30 11.54 L 14.14 11.62 L 13.98 11.69 L 13.83 11.76 L 13.69 11.82 L 13.58 11.88 L 13.50 11.94 L 13.45 12.01 L 13.43 12.10 L 13.44 12.20 L 13.48 12.33 L 13.53 12.46 L 13.60 12.61 L 13.66 12.78 L 13.72 12.95 L 13.76 13.12 L 13.77 13.28 L 13.76 13.42 L 13.72 13.55 L 13.65 13.65 L 13.55 13.72 L 13.42 13.76 L 13.28 13.77 L 13.12 13.76 L 12.95 13.72 L 12.78 13.66 L 12.61 13.60 L 12.46 13.53 L 12.33 13.48 L 12.20 13.44 L 12.10 13.43 L 12.01 13.45 L 11.94 13.50 L 11.88 13.58 L 11.82 13.69 L 11.76 13.83 L 11.69 13.98 L 11.62 14.14 L 11.54 14.30 L 11.45 14.45 L 11.35 14.57 L 11.24 14.67 L 11.12 14.73 L 11.00 14.75 L 10.88 14.73 L 10.76 14.67 L 10.65 14.57 L 10.55 14.45 L 10.46 14.30 L 10.38 14.14 L 10.31 13.98 L 10.24 13.83 L 10.18 13.69 L 10.12 13.58 L 10.06 13.50 L 9.99 13.45 L 9.90 13.43 L 9.80 13.44 L 9.67 13.48 L 9.54 13.53 L 9.39 13.60 L 9.22 13.66 L 9.05 13.72 L 8.88 13.76 L 8.72 13.77 L 8.58 13.76 L 8.45 13.72 L 8.35 13.65 L 8.28 13.55 L 8.24 13.42 L 8.23 13.28 L 8.24 13.12 L 8.28 12.95 L 8.34 12.78 L 8.40 12.61 L 8.47 12.46 L 8.52 12.33 L 8.56 12.20 L 8.57 12.10 L 8.55 12.01 L 8.50 11.94 L 8.42 11.88 L 8.31 11.82 L 8.17 11.76 L 8.02 11.69 L 7.86 11.62 L 7.70 11.54 L 7.55 11.45 L 7.43 11.35 L 7.33 11.24 L 7.27 11.12 L 7.25 11.00 L 7.27 10.88 L 7.33 10.76 L 7.43 10.65 L 7.55 10.55 L 7.70 10.46 L 7.86 10.38 L 8.02 10.31 L 8.17 10.24 L 8.31 10.18 L 8.42 10.12 L 8.50 10.06 L 8.55 9.99 L 8.57 9.90 L 8.56 9.80 L 8.52 9.67 L 8.47 9.54 L 8.40 9.39 L 8.34 9.22 L 8.28 9.05 L 8.24 8.88 L 8.23 8.72 L 8.24 8.58 L 8.28 8.45 L 8.35 8.35 L 8.45 8.28 L 8.58 8.24 L 8.72 8.23 L 8.88 8.24 L 9.05 8.28 L 9.22 8.34 L 9.39 8.40 L 9.54 8.47 L 9.67 8.52 L 9.80 8.56 L 9.90 8.57 L 9.99 8.55 L 10.06 8.50 L 10.12 8.42 L 10.18 8.31 L 10.24 8.17 L 10.31 8.02 L 10.38 7.86 L 10.46 7.70 L 10.55 7.55 L 10.65 7.43 L 10.76 7.33 L 10.88 7.27 L 11.00 7.25 L 11.12 7.27 L 11.24 7.33 L 11.35 7.43 L 11.45 7.55 L 11.54 7.70 L 11.62 7.86 L 11.69 8.02 L 11.76 8.17 L 11.82 8.31 L 11.88 8.42 L 11.94 8.50 L 12.01 8.55 L 12.10 8.57 L 12.20 8.56 L 12.33 8.52 L 12.46 8.47 L 12.61 8.40 L 12.78 8.34 L 12.95 8.28 L 13.12 8.24 L 13.28 8.23 L 13.42 8.24 L 13.55 8.28 L 13.65 8.35 L 13.72 8.45 L 13.76 8.58 L 13.77 8.72 L 13.76 8.88 L 13.72 9.05 L 13.66 9.22 L 13.60 9.39 L 13.53 9.54 L 13.48 9.67 L 13.44 9.80 L 13.43 9.90 L 13.45 9.99 L 13.50 10.06 L 13.58 10.12 L 13.69 10.18 L 13.83 10.24 L 13.98 10.31 L 14.14 10.38 L 14.30 10.46 L 14.45 10.55 L 14.57 10.65 L 14.67 10.76 L 14.73 10.88 Z" fill="currentColor" class="ColorScheme-Text"/>
+</svg>

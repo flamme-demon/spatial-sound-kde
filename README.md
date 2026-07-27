@@ -1,0 +1,195 @@
+# Spatial Sound KDE
+
+***English** · [Français](README.fr.md)*
+
+A virtual **7.1 binaural** sink for headphones, on PipeWire. A free-software
+equivalent of *Spatial Sound Card*, *Dolby Atmos for Headphones* or
+*DTS Headphone:X*, none of which are ported to Linux.
+
+The principle is the same as those products: a 7.1 output device appears on the
+system, each virtual speaker is convolved with a pair of measured head-related
+impulse responses (HRIR), and the result is mixed down to stereo for headphones.
+
+## What it actually does
+
+Games and video players see a 7.1 sound card and send it a genuine multichannel
+stream. Instead of a plain stereo downmix, every channel is placed in space around
+your head. The main gain is not left/right — stereo already does that — but
+**front/back and externalisation**: the sound stops forming inside your skull.
+
+## Requirements
+
+`install.sh` checks all of the following and stops with an explicit message if
+something is missing. It does not merely print version numbers.
+
+| Required | Check |
+|---|---|
+| bash ≥ 4.0 | associative arrays |
+| PipeWire ≥ 0.3.60 | real version comparison (`sort -V`) |
+| `module-filter-chain` | library present |
+| `pactl`, `paplay`, `systemctl` | present |
+| running PipeWire server | `pactl info` |
+
+| Optional | Without it |
+|---|---|
+| `ffmpeg` | HRIR format is not validated |
+| `python-numpy`, `python-scipy` | no measurement, no test-file generation |
+| `pw-link` | final link check skipped |
+| Plasma ≥ 6 | applet not installed, everything else works |
+
+The 0.3.60 threshold is not decorative: below it the module loads and the sink
+appears, but the graph stays silent — a failure mode that gives you nothing to
+diagnose. Same reasoning behind the 14-channel check on HRIR supplied through
+`--hrir-dir`.
+
+Tested on Manjaro KDE. **Classic PulseAudio is not supported**: the approach relies
+on `module-filter-chain`, which is PipeWire-specific. The script detects it and
+exits cleanly.
+
+Dependency installation uses **pacman**. On other distributions the script lists
+what is missing and carries on without installing anything.
+
+## Installation
+
+```bash
+./install.sh
+```
+
+The script checks the environment, fetches the HRIR sets, generates the
+configuration, installs `surround-profil` and the applet, starts the dedicated
+service and verifies that the sink appears.
+
+| Option | Effect |
+|---|---|
+| `--profil <name>` | initial profile (default: `cmss_game`) |
+| `--hrir-dir <path>` | use local HeSuVi WAVs instead of downloading |
+| `--no-default-sink` | do not make the virtual sink the default output |
+| `--no-deps` | install nothing through pacman |
+| `-y` | ask nothing (and do not reload plasmashell) |
+
+## Choosing a profile
+
+### From the desktop (KDE)
+
+Installation ships a Plasma applet. Right-click the panel or desktop →
+*Add Widgets* → **Spatial Sound**. It shows the active profile, the list grouped by
+use case, and the measurements next to each name. One click switches.
+
+`install.sh` makes the widget *available*; it does not add it to your panel.
+Rearranging an existing desktop layout is the user's decision.
+
+**Installing is not enough to take effect.** `plasmashell` keeps already-loaded QML
+and icons in memory, so an applet update stays invisible until it is reloaded.
+`install.sh` detects this, reports how long it has been running and offers to
+restart it. Under `-y` it does not, and prints the command instead:
+
+```bash
+kquitapp6 plasmashell && kstart plasmashell
+```
+
+### From the terminal
+
+```bash
+surround-profil              # list, with measurements
+surround-profil cmss_game    # switch (~0.15 s, without cutting other audio)
+surround-profil -a           # all 59 available profiles
+surround-profil --data       # TSV output, consumed by the applet
+```
+
+Profiles are not equivalent, and **their reputation does not match their contents**.
+`tools/analyse_hrir.py` measures them:
+
+| Profile | Reverb | Lateralisation | Use |
+|---|---|---|---|
+| `cmss_game` | 39 ms | **+15 dB** | best overall compromise, default |
+| `sonic` | 16 ms | +11 dB | very dry |
+| `EAC_Default` | 3 ms | +9 dB | driest (44.1 kHz) |
+| `atmos` | 46 ms | +12 dB | cinema, spacious |
+| `ssc_ny` / `ssc_syd` | 42 / 99 ms | +9 / +14 dB | the Spatial Sound Card rooms |
+| `dh+` | 109 ms | +3 dB | very reverberant despite its FPS reputation |
+| `dvs` | 21 ms | **+2 dB** | avoid — does not lateralise |
+
+**Lateralisation** = energy difference between the ear on the source's side and the
+other one, on the rear channels. This is the decisive criterion: below ~3 dB the
+profile no longer places anything in space, however tonally neutral it may be.
+
+**Reverb** = how long the energy stays above −40 dB. The longer it is, the more
+distant the sound feels — pleasant for film, penalising in games.
+
+The script also measures **colouration** (peak-to-peak deviation between 200 Hz and
+8 kHz). Do not read it as a quality criterion: `dvs` shows the flattest response of
+the whole set (0.7 dB) precisely because it filters almost nothing — and therefore
+does not lateralise. An overly flat response is a warning sign, not a guarantee of
+neutrality.
+
+## Testing
+
+```bash
+cd ~/.local/share/pipewire/tests-surround
+python3 gen_tests.py
+paplay -d effect_input.virtual-surround-7.1-hesuvi test_cercle.wav
+```
+
+- `test_avant_arriere.wav` — continuous path front → sides → rear → back again
+- `test_cercle.wav` — one isolated burst per speaker, clockwise
+
+These are **raw 7.1 tracks**: play them on the virtual sink, not directly. They use
+pink-noise bursts, because a steady sine tone barely localises at all.
+
+## Known pitfalls
+
+- **Never enable a game's own "headphones" or "HRTF" mode.** Pick a **7.1** output.
+  Otherwise two spatialisations stack and the image turns hollow and strange.
+- A stereo game gives no rear placement — only externalisation.
+- Only **14-channel** HeSuVi WAVs work; `surround-profil` rejects the rest.
+- Voice chat also goes through the convolution and picks up the profile's
+  reverberation. To avoid it, send that stream alone to the raw headphone device in
+  `pavucontrol`.
+- Added latency is on the order of one PipeWire quantum (~21 ms at 1024 @ 48 kHz).
+  Lower the quantum if you feel it in games.
+- Manjaro ships no `pipewire-filter-chain.service`: `install.sh` writes its own
+  `spatial-sound.service` unit.
+
+## Uninstalling
+
+```bash
+./uninstall.sh          # remove config and binaries, keep the HRIR
+./uninstall.sh --tout   # also erase the HRIR and test files
+```
+
+## Installed files
+
+```
+~/.config/pipewire/filter-chain.conf.d/99-spatial-sound.conf          convolution graph
+~/.config/systemd/user/spatial-sound.service                          dedicated instance
+~/.local/share/pipewire/hrir_hesuvi/                                  HRIR profiles
+~/.local/share/pipewire/tests-surround/                               measurement/test tools
+~/.local/bin/surround-profil                                          profile selector
+~/.local/share/plasma/plasmoids/org.spatialsound.kde/                 Plasma applet (KDE)
+~/.local/share/icons/hicolor/scalable/apps/org.spatialsound.kde.svg   icon
+```
+
+## Architecture
+
+The convolution chain does **not** run inside the main PipeWire server, but in a
+dedicated instance started by `spatial-sound.service` — which is the intended use of
+the `filter-chain.conf` file shipped with PipeWire.
+
+The direct consequence: switching profile only reloads that small instance. Measured
+at **0.15 s**, against ~3 s for a full restart of the audio stack, and above all
+**without interrupting other streams** — music, chat and browser keep playing. That
+is why the configuration lives in `filter-chain.conf.d/` rather than
+`pipewire.conf.d/`.
+
+The icon is installed into the `hicolor` theme and referenced by **name**, not by
+path: the widget browser only resolves theme icon names.
+
+## Credits
+
+The HRIR sets come from the **HeSuVi** project, which captured the responses of many
+commercial virtualisers. The convolution graph derives from the
+`sink-virtual-surround-7.1-hesuvi.conf` example shipped with PipeWire.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

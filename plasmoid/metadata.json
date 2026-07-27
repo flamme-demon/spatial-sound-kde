@@ -1,0 +1,20 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Grégory D"
+            }
+        ],
+        "Category": "Multimedia",
+        "Description": "Choose the binaural spatialisation profile for your headphones",
+        "Description[fr]": "Choisit le profil de spatialisation binaurale du casque",
+        "Icon": "org.spatialsound.kde",
+        "Id": "org.spatialsound.kde",
+        "License": "MIT",
+        "Name": "Spatial Sound",
+        "Name[fr]": "Spatial Sound",
+        "Version": "0.1.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
