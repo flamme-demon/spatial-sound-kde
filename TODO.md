@@ -34,6 +34,11 @@ Deux convolueurs supplémentaires en sortie du mixeur, un par oreille :
 L'ordre compte : spatialisation **puis** correction. Le graphe existant n'a pas
 besoin d'être touché, seulement prolongé.
 
+Point de comparaison utile : Spatial Sound Card lui-meme n'expose que **quatre**
+entrees dans son menu « HEADPHONE EQ » (DT 770M, DT 880 PRO, Default, Beats Pro).
+Une implementation adossee a ASH ou AutoEQ couvrirait des centaines de modeles, donc
+depasserait le produit commercial sur cet axe precis.
+
 Source de filtres : [ASH Toolset](https://github.com/ShanonPearce/ASH-Toolset) —
 FIR à phase minimale, 1024 points, WAV mono 44,1 kHz, couvrant AKG, Audeze,
 Audio-Technica, Beyerdynamic, HiFiMAN, Sennheiser et d'autres.
@@ -49,6 +54,26 @@ Alternative : [AutoEQ](https://autoeq.app/).
 - [ ] Un HpCF mal choisi **dégrade** le son : appliquer une correction DT 990 à un
       autre casque creuse un pic qui n'existe pas. Prévoir un avertissement explicite,
       et surtout ne pas en activer un par défaut.
+
+---
+
+## Enveloppe de reverberation reglable
+
+Spatial Sound Card expose un « ROOM ENVELOPE » : une courbe de decroissance editable,
+graduee en dB, qui laisse raccourcir ou allonger la queue de reverberation **sans
+changer de profil**.
+
+Chez nous, le seul reglage equivalent est de basculer d'un profil a l'autre — passer
+de `atmos` (46 ms) a `cmss_game` (39 ms) ou `sonic` (16 ms). C'est grossier : on
+change en meme temps la lateralisation et la coloration, alors qu'on ne voulait
+toucher qu'a la distance percue.
+
+Implementable simplement : appliquer une fenetre de decroissance exponentielle a la
+queue du HRIR avant de le donner au convolueur, et regenerer un WAV temporaire. Un
+curseur « proximite » dans l'applet piloterait la constante de temps.
+
+A verifier : jusqu'ou raccourcir sans introduire de discontinuite audible, et si
+l'operation doit preserver l'energie totale ou non.
 
 ---
 
@@ -89,5 +114,8 @@ permettra aussi de confirmer que la barre de défilement a bien disparu.
 - [ ] **Latence réelle de bout en bout.** `pactl` renvoie 0 µs, ce qui signifie
       « non disponible », pas « nulle ». L'estimation d'un quantum (~21 ms à 1024 @
       48 kHz) est théorique et n'a jamais été mesurée.
+      Corroboration indirecte : Spatial Sound Card affiche un « LATENCY TARGET » de
+      **21,3 ms**, soit le meme ordre de grandeur. Cela rend l'estimation credible
+      mais ne la mesure pas — a confirmer par une vraie boucle d'aller-retour.
 - [ ] **Comportement sur une autre distribution que Manjaro**, et sur du matériel
       autre qu'un casque USB stéréo.
