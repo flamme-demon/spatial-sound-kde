@@ -198,6 +198,11 @@ Les HRIR proviennent du projet **HeSuVi**, qui a capturé les réponses de nombr
 virtualiseurs commerciaux. Le graphe de convolution dérive de l'exemple
 `sink-virtual-surround-7.1-hesuvi.conf` fourni avec PipeWire.
 
+## Feuille de route
+
+Les pistes ouvertes sont dans [TODO.md](TODO.md) — correction de casque
+(HpCF), empaquetage AUR, et ce qui n'a pas encore été vérifié.
+
 ## Licence
 
 MIT — voir [LICENSE](LICENSE).

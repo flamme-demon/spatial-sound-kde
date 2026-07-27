@@ -198,6 +198,11 @@ The HRIR sets come from the **HeSuVi** project, which captured the responses of 
 commercial virtualisers. The convolution graph derives from the
 `sink-virtual-surround-7.1-hesuvi.conf` example shipped with PipeWire.
 
+## Roadmap
+
+Open items are listed in [TODO.md](TODO.md) — headphone compensation
+filters (HpCF), AUR packaging, and what has not been verified yet.
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
