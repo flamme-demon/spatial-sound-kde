@@ -232,6 +232,16 @@ vert "  profil initial : $PROFIL_DEFAUT"
 titre "Configuration du sink virtuel"
 mkdir -p "$CONF_DIR"
 
+# Memorise la sortie physique d'origine pour la cibler dans la config et
+# pour que uninstall.sh la restaure exactement.
+ANCIEN_SINK="$(pactl get-default-sink 2>/dev/null || true)"
+if [[ -n "$ANCIEN_SINK" && "$ANCIEN_SINK" != *virtual-surround* ]]; then
+  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
+  vert "  sortie physique precedente : $ANCIEN_SINK"
+else
+  ANCIEN_SINK=""
+fi
+
 # Graphe genere ici plutot que copie depuis /usr/share : le fichier d'exemple
 # n'existe pas sur toutes les distros, et son chemin HRIR relatif ne se resout pas.
 {
@@ -341,6 +351,13 @@ CANAUX
 ]
 PIED
 } > "$CONF"
+
+# Si on a un peripherique physique de reference, on ancre la sortie dessus
+# pour eviter que WirePlumber ne la route ailleurs (ex. USB > interne).
+if [[ -n "$ANCIEN_SINK" ]]; then
+  sed -i '/audio\.position = \[ FL FR \]/a\                target.object  = "'"$ANCIEN_SINK"'"' "$CONF"
+  vert "  sortie ancree sur : $ANCIEN_SINK"
+fi
 vert "  ecrit : $CONF"
 
 # Service dedie : c'est lui qui rend le changement de profil instantane.
@@ -459,12 +476,6 @@ fi
 
 # --------------------------------------------------------------- redemarrage
 titre "Demarrage de la chaine"
-# Memorise la sortie d'origine pour que uninstall.sh la restaure exactement :
-# deviner « la premiere sortie ALSA » renvoie souvent le HDMI plutot que le casque.
-ANCIEN_SINK="$(pactl get-default-sink 2>/dev/null || true)"
-if [[ -n "$ANCIEN_SINK" && "$ANCIEN_SINK" != *virtual-surround* ]]; then
-  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
-fi
 # Une installation d'avant la 1.2 laisse la chaine dans le serveur principal :
 # il faut le redemarrer une fois pour que l'ancien sink disparaisse.
 if [[ -f "$UNITE_ANCIENNE" ]]; then
@@ -514,7 +525,14 @@ fi
 if [[ "${LIENS:-0}" -eq -1 ]]; then
   jaune "  pw-link absent : liens non verifies"
 elif [[ "${LIENS:-0}" -ge 2 ]]; then
-  vert "  sortie reliee au peripherique physique ($LIENS liens)"
+  # Verifie que la sortie est connectee au bon peripherique
+  CIBLE="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' | grep '|->' | head -1 | sed 's/.*|-> //; s/:.*//')"
+  if [[ -n "$ANCIEN_SINK" && -n "$CIBLE" && "$CIBLE" != "$ANCIEN_SINK" ]]; then
+    jaune "  sortie connectee a $CIBLE au lieu de $ANCIEN_SINK"
+    jaune "  Reinstalle ou corrige a la main : pw-link ..."
+  else
+    vert "  sortie reliee a $CIBLE ($LIENS liens)"
+  fi
 else
   jaune "  sortie non encore reliee — normal si aucun son ne joue."
   jaune "  Elle se connectera au premier flux audio."
