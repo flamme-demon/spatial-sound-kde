@@ -130,6 +130,21 @@ the whole set (0.7 dB) precisely because it filters almost nothing — and there
 does not lateralise. An overly flat response is a warning sign, not a guarantee of
 neutrality.
 
+## Custom rooms
+
+Any **14-channel HeSuVi** WAV dropped into `~/.local/share/pipewire/hrir_hesuvi/`
+becomes a profile: it shows up in `surround-profil -a`, in the applet, and can be
+measured with `tools/analyse_hrir.py`.
+
+That is the route to room parameters, which this project does not expose itself.
+[**ASH Toolset**](https://github.com/ShanonPearce/ASH-Toolset) (AGPL-3.0, tested on
+Linux) synthesises room responses from parameters — acoustic space, direct sound gain,
+HRTF dataset, room target, bass crossover — and **exports straight to the 14-channel
+HeSuVi format**. The resulting file drops in as is.
+
+Measure it before adopting it: `python3 tools/analyse_hrir.py`. Lateralisation remains
+the criterion that matters, and a synthesised room is no exception.
+
 ## Headphone correction
 
 A layer **distinct** from the profiles above, and complementary to them: an HRIR

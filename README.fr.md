@@ -130,6 +130,21 @@ la plus faible du lot (0,7 dB) précisément parce qu'il ne filtre presque rien 
 ne latéralise pas. Une réponse trop plate est un signal d'alarme, pas un gage de
 neutralité.
 
+## Salles personnalisées
+
+N'importe quel WAV **HeSuVi 14 canaux** déposé dans
+`~/.local/share/pipewire/hrir_hesuvi/` devient un profil : il apparaît dans
+`surround-profil -a`, dans l'applet, et se mesure avec `tools/analyse_hrir.py`.
+
+C'est la voie pour des paramètres de salle, que ce projet n'expose pas lui-même.
+[**ASH Toolset**](https://github.com/ShanonPearce/ASH-Toolset) (AGPL-3.0, testé sous
+Linux) synthétise des réponses de salle à partir de paramètres — espace acoustique,
+gain du son direct, jeu HRTF, cible de salle, coupure des basses — et **exporte
+directement au format HeSuVi 14 canaux**. Le fichier produit se dépose tel quel.
+
+Mesure-le avant de l'adopter : `python3 tools/analyse_hrir.py`. Le critère qui compte
+reste la latéralisation, et une salle synthétisée n'y échappe pas.
+
 ## Correction de casque
 
 Couche **distincte** des profils ci-dessus, et cumulable avec eux : un profil HRIR

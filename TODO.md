@@ -50,7 +50,16 @@ Spatial Sound Card expose des presets de salle editables. Chez nous, la salle es
 aucun parametre n'est reglable. Changer de salle = changer de profil, donc changer en
 meme temps la lateralisation et le timbre.
 
-Deux voies, de cout tres inegal.
+**Voie deja ouverte, sans une ligne de code :** [ASH Toolset](https://github.com/ShanonPearce/ASH-Toolset)
+synthetise des salles a partir de parametres et exporte **au format HeSuVi 14 canaux**,
+que notre chaine consomme deja. Verifie : un WAV externe depose dans le dossier des
+profils est liste, selectionnable et fonctionnel. C'est documente dans les README.
+
+Limite : ASH Toolset est en AGPL-3.0 et n'a pas d'interface en ligne de commande
+documentee. On peut donc s'en servir et le recommander, mais ni l'embarquer dans ce
+depot MIT, ni automatiser la generation.
+
+Restent deux voies si l'on veut des reglages **depuis l'applet**, de cout tres inegal.
 
 ### 1. Mise en forme de l'enveloppe — voir la section dediee ci-dessus
 
