@@ -113,7 +113,7 @@ contenu**. `tools/analyse_hrir.py` les mesure :
 | `sonic` | 16 ms | +11 dB | très sec |
 | `EAC_Default` | 3 ms | +9 dB | le plus sec (44,1 kHz) |
 | `atmos` | 46 ms | +12 dB | cinéma, ample |
-| `ssc_ny` / `ssc_syd` | 42 / 99 ms | +9 / +14 dB | les salles de Spatial Sound Card |
+| `ssc_ny` / `ssc_syd` | 42 / 99 ms | +9 / +14 dB | salles de Spatial Sound Card (New York, Sydney) |
 | `dh+` | 109 ms | +3 dB | très réverbérant malgré sa réputation FPS |
 | `dvs` | 21 ms | **+2 dB** | à éviter — ne latéralise pas |
 
