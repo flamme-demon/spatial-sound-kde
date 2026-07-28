@@ -239,7 +239,13 @@ if [[ -n "$ANCIEN_SINK" && "$ANCIEN_SINK" != *virtual-surround* ]]; then
   printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
   vert "  sortie physique precedente : $ANCIEN_SINK"
 else
+  # En reinstallation, le sink par defaut est deja le virtuel.
+  # On lit le peripherique physique depuis l'etat sauvegarde.
   ANCIEN_SINK=""
+  [[ -f "$ETAT" ]] && ANCIEN_SINK="$(sed -n 's/^sink_precedent=//p' "$ETAT")"
+  if [[ -n "$ANCIEN_SINK" ]]; then
+    vert "  sortie physique precedente (depuis etat) : $ANCIEN_SINK"
+  fi
 fi
 
 # Graphe genere ici plutot que copie depuis /usr/share : le fichier d'exemple
@@ -292,7 +298,12 @@ CANAUX
   printf '                    { type = builtin label = convolver name = convLFE_L config = { filename = "%s" channel =  6 } }\n' "$HRIR_DIR/hrir.wav"
   printf '                    { type = builtin label = convolver name = convLFE_R config = { filename = "%s" channel = 13 } }\n' "$HRIR_DIR/hrir.wav"
 
-  cat <<'PIED'
+  # Ligne d'ancrage optionnelle : si on a un peripherique physique de reference,
+  # on empeche WirePlumber de router la sortie ailleurs (ex. USB > interne).
+  ANCRE=""
+  [[ -n "$ANCIEN_SINK" ]] && ANCRE=$'\n                target.object  = "'"$ANCIEN_SINK"'"'
+
+  cat <<PIED
                     { type = builtin label = mixer name = mixL }
                     { type = builtin label = mixer name = mixR }
                 ]
@@ -344,20 +355,13 @@ CANAUX
                 node.name      = "effect_output.virtual-surround-7.1-hesuvi"
                 node.passive   = true
                 audio.channels = 2
-                audio.position = [ FL FR ]
+                audio.position = [ FL FR ]${ANCRE:+$ANCRE}
             }
         }
     }
 ]
 PIED
 } > "$CONF"
-
-# Si on a un peripherique physique de reference, on ancre la sortie dessus
-# pour eviter que WirePlumber ne la route ailleurs (ex. USB > interne).
-if [[ -n "$ANCIEN_SINK" ]]; then
-  sed -i '/audio\.position = \[ FL FR \]/a\                target.object  = "'"$ANCIEN_SINK"'"' "$CONF"
-  vert "  sortie ancree sur : $ANCIEN_SINK"
-fi
 vert "  ecrit : $CONF"
 
 # Service dedie : c'est lui qui rend le changement de profil instantane.
