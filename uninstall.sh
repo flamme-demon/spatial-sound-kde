@@ -2,6 +2,12 @@
 # Retire Spatial Sound KDE et restaure la sortie audio physique.
 set -euo pipefail
 
+# « cmd | grep -q » est un piege sous « set -o pipefail » : grep ferme le tuyau
+# des la premiere correspondance, le producteur meurt de SIGPIPE, et pipefail
+# propage cet echec — le test echoue donc precisement quand il trouve. On
+# capture la sortie avant de la tester.
+contient() { [[ "$1" == *"$2"* ]]; }
+
 HRIR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
 TEST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/tests-surround"
 HPCF_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
@@ -21,7 +27,7 @@ PHYS=""
 if [[ -f "$ETAT" ]]; then
   PHYS="$(sed -n 's/^sink_precedent=//p' "$ETAT")"
   # Le peripherique peut avoir disparu depuis (casque USB debranche).
-  pactl list sinks short 2>/dev/null | grep -qw -- "$PHYS" || PHYS=""
+  contient "$(pactl list sinks short 2>/dev/null || true)" "$PHYS" || PHYS=""
 fi
 if [[ -z "$PHYS" ]]; then
   PHYS="$(pactl list sinks short 2>/dev/null \
@@ -43,7 +49,8 @@ if [[ -f "$UNITE" ]]; then
   rm -fv "$UNITE"
   systemctl --user daemon-reload 2>/dev/null || true
 fi
-rm -fv "$CONF" "$CONF_ANCIEN" "$BIN"
+rm -fv "$CONF" "$CONF_ANCIEN" "$BIN" \
+       "${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/98-spatial-sound-sink.conf"
 rm -fv "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/org.spatialsound.kde.svg" \
        "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/org.pwsurround.spatialsound.svg" 2>/dev/null
 # Les deux identifiants : l'actuel et celui d'avant la 1.1.
@@ -71,7 +78,7 @@ if [[ -n "$SOURCE_AVANT" && "$SOURCE_AVANT" != "$(pactl get-default-source 2>/de
   pactl set-default-source "$SOURCE_AVANT" 2>/dev/null \
     && echo "Entree par defaut restauree : $SOURCE_AVANT"
 fi
-if pactl list sinks short 2>/dev/null | grep -q "effect_input.virtual-surround"; then
+if contient "$(pactl list sinks short 2>/dev/null || true)" "spatial-sound-sink"; then
   echo "Le sink virtuel est encore la — deconnecte/reconnecte ta session."
 else
   echo "Desinstallation terminee."

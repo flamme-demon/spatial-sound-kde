@@ -229,14 +229,6 @@ pink-noise bursts, because a steady sine tone barely localises at all.
   `pavucontrol`.
 - Added latency is on the order of one PipeWire quantum (~21 ms at 1024 @ 48 kHz).
   Lower the quantum if you feel it in games.
-- **The sink does not appear in the panel volume applet.** It is visible and
-  selectable in *System Settings → Sound*, and audio works normally. Cause:
-  `module-filter-chain` creates the node with `object.register = "false"`, which
-  keeps it out of the registry the session manager consumes — `wpctl status` does
-  not list it either. Forcing `object.register = true` changes nothing, and neither
-  does loading the chain in the main daemon instead of our dedicated instance: the
-  limitation is upstream. To change the default output, use System Settings or
-  `pactl set-default-sink`. Profile switching goes through our own applet.
 - Manjaro ships no `pipewire-filter-chain.service`: `install.sh` writes its own
   `spatial-sound.service` unit.
 
@@ -271,6 +263,22 @@ at **0.15 s**, against ~3 s for a full restart of the audio stack, and above all
 **without interrupting other streams** — music, chat and browser keep playing. That
 is why the configuration lives in `filter-chain.conf.d/` rather than
 `pipewire.conf.d/`.
+
+The system-visible device is a **real sink**, declared in the main PipeWire daemon.
+The convolution chain runs in the dedicated instance and captures that sink's monitor.
+
+The detour is not gratuitous: a node created by a client — which our sink was until
+0.4 — is not registered with the session manager. It worked, but stayed invisible to
+`wpctl` and to the panel volume applet, while System Settings displayed it. A daemon
+sink is registered.
+
+The front end is static: only the chain behind it reloads when you switch profiles, so
+the 0.15 s is preserved.
+
+**Consequence worth knowing**: the chain's output must be explicitly anchored to the
+physical device. Without it, WirePlumber routes it to the default sink — which is now
+our own — and the chain loops back onto its input, silently. `install.sh` writes the
+anchor and verifies there is no loop.
 
 The icon is installed into the `hicolor` theme and referenced by **name**, not by
 path: the widget browser only resolves theme icon names.

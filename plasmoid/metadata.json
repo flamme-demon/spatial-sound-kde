@@ -13,7 +13,7 @@
         "License": "MIT",
         "Name": "Spatial Sound",
         "Name[fr]": "Spatial Sound",
-        "Version": "0.3.0"
+        "Version": "0.4.0"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API-Minimum-Version": "6.0"

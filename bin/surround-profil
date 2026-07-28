@@ -2,9 +2,16 @@
 # Bascule le profil HRIR du sink « Casque Surround 7.1 » et recharge PipeWire.
 set -euo pipefail
 
+# « cmd | grep -q » est un piege sous « set -o pipefail » : grep ferme le tuyau
+# des la premiere correspondance, le producteur meurt de SIGPIPE, et pipefail
+# propage cet echec — le test echoue donc precisement quand il trouve. On
+# capture la sortie avant de la tester.
+contient() { [[ "$1" == *"$2"* ]]; }
+
 HR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
 HP="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
-SINK="effect_input.virtual-surround-7.1-hesuvi"
+# Le peripherique visible du systeme, declare dans le demon principal.
+SINK="spatial-sound-sink"
 AUTOEQ="https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results"
 
 # Table de reference, mesuree par tools/analyse_hrir.py.
@@ -98,7 +105,7 @@ recharger() {
   if [[ -f "$HOME/.config/systemd/user/spatial-sound.service" ]]; then
     systemctl --user restart spatial-sound.service
     for _ in $(seq 40); do
-      pactl list sinks short 2>/dev/null | grep -q "$SINK" && break
+      contient "$(pactl list sinks short 2>/dev/null || true)" "$SINK" && break
       sleep 0.05
     done
   else
@@ -251,7 +258,7 @@ case "${1-}" in
       exit 0 ;;
   --enveloppe-actuelle) enveloppe_actuelle; exit 0 ;;
   --enveloppe-dispo)    [[ -x "$GEN" ]] && echo 1 || echo 0; exit 0 ;;
-  --status)        pactl list sinks short 2>/dev/null | grep -q "$SINK" \
+  --status)        contient "$(pactl list sinks short 2>/dev/null || true)" "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
   -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
         | sed 's/\.wav$//' | sort | column; exit 0 ;;

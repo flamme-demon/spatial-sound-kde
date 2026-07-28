@@ -230,15 +230,6 @@ localisant quasiment pas.
   Pour l'éviter, envoie ce flux seul vers le casque brut dans `pavucontrol`.
 - Latence ajoutée : de l'ordre d'un quantum PipeWire (~21 ms à 1024 @ 48 kHz).
   Réductible en abaissant le quantum si tu la ressens en jeu.
-- **Le sink n'apparaît pas dans l'applet de volume du panneau.** Il est bien visible
-  et sélectionnable dans *Configuration du système → Son*, et le son fonctionne
-  normalement. En cause : `module-filter-chain` crée le nœud avec
-  `object.register = "false"`, ce qui le tient hors du registre que consomme le
-  gestionnaire de session — `wpctl status` ne le liste pas non plus. Forcer
-  `object.register = true` ne change rien, et le charger dans le démon principal
-  plutôt que dans notre instance dédiée non plus : la limitation est en amont.
-  Pour changer de sortie par défaut, passe par la configuration système ou
-  `pactl set-default-sink`. Le choix des profils, lui, se fait dans notre applet.
 - Manjaro ne fournit pas de `pipewire-filter-chain.service` : `install.sh` écrit
   sa propre unité `spatial-sound.service`.
 
@@ -273,6 +264,23 @@ Mesuré à **0,15 s**, contre ~3 s pour un redémarrage complet de la pile audio
 surtout **sans interrompre les autres flux** : musique, chat et navigateur continuent
 de jouer. C'est la raison pour laquelle la configuration vit dans
 `filter-chain.conf.d/` et non dans `pipewire.conf.d/`.
+
+Le périphérique visible du système est un **sink à part entière**, déclaré dans le
+démon PipeWire principal. La chaîne de convolution, elle, tourne dans l'instance
+dédiée et capture le monitor de ce sink.
+
+Ce détour n'est pas gratuit : un nœud créé par un client — ce qu'était notre sink
+jusqu'à la 0.4 — n'est pas enregistré auprès du gestionnaire de session. Il
+fonctionnait, mais restait invisible de `wpctl` et de l'applet de volume du panneau,
+alors que la configuration système l'affichait. Un sink du démon, lui, est enregistré.
+
+La façade est statique : seule la chaîne derrière elle est rechargée quand tu changes
+de profil, donc les 0,15 s sont préservées.
+
+**Conséquence à connaître** : la sortie de la chaîne doit être ancrée explicitement sur
+le périphérique physique. Sans cela, WirePlumber la route vers le périphérique par
+défaut — qui est désormais notre propre sink — et la chaîne se reboucle sur son entrée,
+en silence. `install.sh` écrit l'ancrage et vérifie l'absence de boucle.
 
 L'icône est déposée dans le thème `hicolor` et référencée par son **nom**, pas par un
 chemin : le navigateur de widgets ne résout que des noms d'icônes de thème.

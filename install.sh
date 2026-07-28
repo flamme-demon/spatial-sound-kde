@@ -9,6 +9,12 @@
 #
 set -euo pipefail
 
+# « cmd | grep -q » est un piege sous « set -o pipefail » : grep ferme le tuyau
+# des la premiere correspondance, le producteur meurt de SIGPIPE, et pipefail
+# propage cet echec — le test echoue donc precisement quand il trouve. On
+# capture la sortie avant de la tester.
+contient() { [[ "$1" == *"$2"* ]]; }
+
 PROJET="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HRIR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
 HPCF_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
@@ -17,6 +23,14 @@ HPCF_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
 # n'interrompt aucun autre flux audio.
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/filter-chain.conf.d"
 CONF="$CONF_DIR/99-spatial-sound.conf"
+# Le peripherique visible est declare dans le demon PRINCIPAL, pas dans notre
+# instance dediee : un noeud cree par un client n'est pas enregistre aupres du
+# gestionnaire de session, donc n'apparait ni dans wpctl ni dans l'applet de
+# volume. Un sink du demon, lui, l'est. Il est statique — seule la chaine de
+# convolution derriere lui est rechargee quand on change de profil.
+CONF_SINK_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d"
+CONF_SINK="$CONF_SINK_DIR/98-spatial-sound-sink.conf"
+NOM_SINK="spatial-sound-sink"
 # Emplacements d'avant la 0.1.0 : charges par le serveur principal, ou sous
 # l'ancien nom de fichier. Les deux doivent disparaitre, sinon deux sinks
 # coexistent et le son passe par le mauvais.
@@ -136,7 +150,7 @@ else
        En dessous, le sink se cree mais ne produit aucun son."
 fi
 
-if ! find /usr/lib /usr/lib64 /usr/local/lib -name "libpipewire-module-filter-chain.so" 2>/dev/null | grep -q .; then
+if [[ -z "$(find /usr/lib /usr/lib64 /usr/local/lib -name "libpipewire-module-filter-chain.so" 2>/dev/null | head -1)" ]]; then
   mourir "module-filter-chain absent. Installer le paquet 'pipewire-audio'."
 fi
 vert "  module-filter-chain present"
@@ -264,20 +278,41 @@ vert "  index : $(grep -vc '^#' "$HPCF_DIR/index.tsv") casques mesures (AutoEQ)"
 titre "Configuration du sink virtuel"
 mkdir -p "$CONF_DIR"
 
-# Memorise la sortie physique d'origine pour la cibler dans la config et
-# pour que uninstall.sh la restaure exactement.
-ANCIEN_SINK="$(pactl get-default-sink 2>/dev/null || true)"
-if [[ -n "$ANCIEN_SINK" && "$ANCIEN_SINK" != *virtual-surround* ]]; then
-  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
-  vert "  sortie physique precedente : $ANCIEN_SINK"
-else
-  # En reinstallation, le sink par defaut est deja le virtuel.
-  # On lit le peripherique physique depuis l'etat sauvegarde.
-  ANCIEN_SINK=""
-  [[ -f "$ETAT" ]] && ANCIEN_SINK="$(sed -n 's/^sink_precedent=//p' "$ETAT")"
-  if [[ -n "$ANCIEN_SINK" ]]; then
-    vert "  sortie physique precedente (depuis etat) : $ANCIEN_SINK"
+# Sortie physique de reference, vers laquelle la chaine enverra son resultat.
+#
+# Elle doit imperativement etre un peripherique REEL : la sortie du graphe est
+# passive, donc routee par WirePlumber vers le peripherique par defaut — qui est
+# desormais notre propre sink. Sans ancrage explicite, la chaine se rebranche sur
+# sa propre entree et plus aucun son ne sort.
+est_a_nous() {
+  [[ "$1" == *virtual-surround* || "$1" == "$NOM_SINK" || "$1" == effect_* ]]
+}
+sortie_physique() {
+  local c
+  # 1. la valeur memorisee, si elle designe toujours un peripherique reel
+  if [[ -f "$ETAT" ]]; then
+    c="$(sed -n 's/^sink_precedent=//p' "$ETAT")"
+    if [[ -n "$c" ]] && ! est_a_nous "$c" && contient "$(pactl list sinks short 2>/dev/null || true)" "$c"; then
+      echo "$c"; return
+    fi
   fi
+  # 2. la sortie par defaut actuelle, si ce n'est pas une des notres
+  c="$(pactl get-default-sink 2>/dev/null || true)"
+  if [[ -n "$c" ]] && ! est_a_nous "$c"; then echo "$c"; return; fi
+  # 3. a defaut, une sortie materielle, en ecartant le HDMI qui est rarement
+  #    celle du casque
+  c="$(pactl list sinks short 2>/dev/null \
+       | awk '$2 ~ /^alsa_output/ && $2 !~ /hdmi|dp_|display/ {print $2; exit}')"
+  [[ -n "$c" ]] && { echo "$c"; return; }
+  pactl list sinks short 2>/dev/null | awk '$2 ~ /^alsa_output/ {print $2; exit}'
+}
+
+ANCIEN_SINK="$(sortie_physique)"
+if [[ -n "$ANCIEN_SINK" ]]; then
+  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
+  vert "  sortie physique : $ANCIEN_SINK"
+else
+  rouge "  aucune sortie physique identifiee — la chaine n'aura pas de destination."
 fi
 
 # Graphe genere ici plutot que copie depuis /usr/share : le fichier d'exemple
@@ -395,7 +430,9 @@ PIED
             }
             capture.props = {
                 node.name      = "effect_input.virtual-surround-7.1-hesuvi"
-                media.class    = Audio/Sink
+                media.class    = Stream/Input/Audio
+                stream.capture.sink = true
+                target.object  = "spatial-sound-sink"
                 audio.channels = 8
                 audio.position = [ FL FR FC LFE RL RR SL SR ]
             }
@@ -410,6 +447,27 @@ PIED
 ]
 PIED
 } > "$CONF"
+mkdir -p "$CONF_SINK_DIR"
+cat > "$CONF_SINK" <<SINK
+# Genere par Spatial Sound KDE — ne pas editer a la main.
+# Peripherique visible du systeme. Il doit vivre dans le demon principal pour
+# etre enregistre aupres du gestionnaire de session ; declare dans l'instance
+# dediee, il resterait invisible de l'applet de volume.
+context.objects = [
+    { factory = adapter
+        args = {
+            factory.name     = support.null-audio-sink
+            node.name        = "$NOM_SINK"
+            node.description = "Casque Surround 7.1 (binaural)"
+            media.class      = Audio/Sink
+            audio.position   = [ FL FR FC LFE RL RR SL SR ]
+            monitor.channel-volumes = true
+            monitor.passthrough     = true
+        }
+    }
+]
+SINK
+vert "  peripherique visible : $CONF_SINK"
 vert "  ecrit : $CONF"
 
 # Service dedie : c'est lui qui rend le changement de profil instantane.
@@ -558,8 +616,8 @@ ANCIEN_TROUVE=0
 for c in "${CONFS_ANCIENS[@]}"; do
   [[ -f "$c" ]] && { rm -f "$c"; ANCIEN_TROUVE=1; }
 done
-if (( ANCIEN_TROUVE )); then
-  jaune "  ancienne configuration retiree"
+if (( ANCIEN_TROUVE )) || [[ ! "$(pactl list sinks short 2>/dev/null)" == *"$NOM_SINK"* ]]; then
+  (( ANCIEN_TROUVE )) && jaune "  ancienne configuration retiree"
   # WirePlumber reevalue ses regles de routage au redemarrage. Il restaure
   # normalement l'entree choisie par l'utilisateur, mais rien ne le garantit
   # sur toutes les configurations — et une entree changee en silence se
@@ -578,18 +636,29 @@ systemctl --user restart spatial-sound.service 2>/dev/null || true
 
 for _ in $(seq 20); do
   sleep 0.5
-  pactl list sinks short 2>/dev/null | grep -q "effect_input.virtual-surround-7.1-hesuvi" && break
+  contient "$(pactl list sinks short 2>/dev/null || true)" "$NOM_SINK" && break
 done
 
-if ! pactl list sinks short 2>/dev/null | grep -q "effect_input.virtual-surround-7.1-hesuvi"; then
+if ! contient "$(pactl list sinks short 2>/dev/null || true)" "$NOM_SINK"; then
   rouge "  le sink virtuel n'est pas apparu."
   echo "  Diagnostic : journalctl --user -u pipewire -n 50 | grep -i 'filter\\|convolv\\|error'"
   exit 1
 fi
 vert "  sink « Casque Surround 7.1 » actif"
 
+# Migration depuis l'architecture d'avant la 0.4 : le peripherique par defaut
+# etait alors le noeud de la chaine elle-meme, qui n'est plus un sink. Laisse tel
+# quel, le systeme n'aurait plus aucune sortie valide.
+DEFAUT_COURANT="$(pactl get-default-sink 2>/dev/null || true)"
+if [[ "$DEFAUT_COURANT" == *virtual-surround* || "$DEFAUT_COURANT" == effect_* ]]; then
+  jaune "  ancien peripherique par defaut detecte : $DEFAUT_COURANT"
+  pactl set-default-sink "$NOM_SINK" 2>/dev/null \
+    && vert "  bascule sur le nouveau peripherique" \
+    || rouge "  bascule impossible — choisis « Casque Surround 7.1 » a la main"
+fi
+
 if [[ $SET_DEFAULT_SINK -eq 1 ]]; then
-  pactl set-default-sink effect_input.virtual-surround-7.1-hesuvi
+  pactl set-default-sink "$NOM_SINK"
   vert "  defini comme sortie par defaut (ancienne : ${ANCIEN_SINK:-inconnue})"
 fi
 
@@ -615,6 +684,58 @@ else
   jaune "  sortie non encore reliee — normal si aucun son ne joue."
   jaune "  Elle se connectera au premier flux audio."
 fi
+
+# Verification du chemin complet. Chaque point a deja casse au moins une fois :
+# un sink invisible du gestionnaire de session, une entree non capturee, et une
+# sortie rebouclee sur notre propre entree — silence total dans les trois cas.
+titre "Verification de la chaine"
+ETAPES_OK=1
+
+if contient "$(pactl list sinks short 2>/dev/null || true)" "$NOM_SINK"; then
+  vert "  peripherique present"
+else
+  rouge "  peripherique absent"; ETAPES_OK=0
+fi
+
+if command -v wpctl >/dev/null; then
+  # Le gestionnaire de session adopte le noeud avec un leger retard apres le
+  # demarrage du demon : sans attente, le controle echoue a tort.
+  VU=0
+  for _ in $(seq 20); do
+    contient "$(wpctl status 2>/dev/null || true)" "Casque Surround 7.1" && { VU=1; break; }
+    sleep 0.25
+  done
+  if (( VU )); then
+    vert "  visible du gestionnaire de session (donc de l'applet de volume)"
+  else
+    jaune "  invisible du gestionnaire de session — l'applet de volume ne le listera pas"
+    ETAPES_OK=0
+  fi
+fi
+
+if command -v pw-link >/dev/null; then
+  if contient "$(pw-link -l 2>/dev/null | grep -A1 "$NOM_SINK:monitor_FL" || true)" "effect_input"; then
+    vert "  entree de la chaine reliee au peripherique"
+  else
+    jaune "  entree non reliee — elle se connectera au premier flux audio"
+  fi
+
+  DEST="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' \
+          | grep '|->' | head -1 | sed 's/.*|-> //; s/:.*//')"
+  if [[ -z "$DEST" ]]; then
+    jaune "  sortie non encore reliee — normal si aucun son ne joue"
+  elif [[ "$DEST" == "$NOM_SINK" || "$DEST" == effect_* ]]; then
+    rouge "  BOUCLE : la sortie revient sur notre propre entree ($DEST)"
+    rouge "  Aucun son ne sortira. Signale-le, c'est un defaut de l'installation."
+    ETAPES_OK=0
+  elif [[ -n "$ANCIEN_SINK" && "$DEST" != "$ANCIEN_SINK" ]]; then
+    jaune "  sortie vers $DEST au lieu de $ANCIEN_SINK"
+  else
+    vert "  sortie vers le peripherique physique : $DEST"
+  fi
+fi
+
+(( ETAPES_OK )) || jaune "  Des points ci-dessus ont echoue : relance ./install.sh, ou ouvre une issue."
 
 cat <<EOF
 
