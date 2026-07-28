@@ -45,6 +45,14 @@ msgid "Film — spacious"
 msgstr "Film — ample"
 
 #: contents/ui/main.qml
+msgid "Yours — not measured"
+msgstr "Les tiens — non mesurés"
+
+#: contents/ui/main.qml
+msgid "added by you"
+msgstr "ajouté par toi"
+
+#: contents/ui/main.qml
 msgid "Avoid"
 msgstr "À éviter"
 

@@ -226,6 +226,12 @@ if [[ ! -f "$HRIR_DIR/$PROFIL_DEFAUT.wav" ]] || ! valider_14ch "$HRIR_DIR/$PROFI
   done
   [[ -f "$HRIR_DIR/$PROFIL_DEFAUT.wav" ]] || mourir "aucun profil 14 canaux exploitable."
 fi
+# Recense les profils livres, pour distinguer ensuite ceux que l'utilisateur
+# ajoute lui-meme : sans cette liste, l'applet devrait afficher les 58 fichiers
+# HeSuVi, variantes inexploitables comprises.
+[[ -f "$PROJET/share/hesuvi-profils.txt" ]] \
+  && install -m644 "$PROJET/share/hesuvi-profils.txt" "$HRIR_DIR/.hesuvi"
+
 ln -sfn "$HRIR_DIR/$PROFIL_DEFAUT.wav" "$HRIR_DIR/hrir.wav"
 vert "  profil initial : $PROFIL_DEFAUT"
 

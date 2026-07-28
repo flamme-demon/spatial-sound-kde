@@ -61,9 +61,14 @@ PlasmoidItem {
                 if (!ligne) continue;
                 const c = ligne.split("\t");
                 if (c.length < 6) continue;
+                // Un profil ajoute par l'utilisateur n'a pas ete mesure :
+                // ses colonnes sont vides et les pastilles restent masquees,
+                // plutot que d'afficher des valeurs inventees.
                 modeleProfils.append({
                     nom: c[0], usage: c[1],
-                    lat: parseInt(c[2]), reverb: parseInt(c[3]),
+                    mesure: c[2] !== "",
+                    lat: c[2] === "" ? 0 : parseInt(c[2]),
+                    reverb: c[3] === "" ? 0 : parseInt(c[3]),
                     note: c[4], estActif: c[5] === "1"
                 });
                 if (c[5] === "1") root.profilActuel = c[0];
@@ -353,6 +358,7 @@ PlasmoidItem {
                     width: ListView.view.width
                     text: section === "jeu"    ? i18n("Gaming — dry and precise")
                         : section === "film"   ? i18n("Film — spacious")
+                        : section === "perso"  ? i18n("Yours — not measured")
                         :                        i18n("Avoid")
                 }
 
@@ -393,6 +399,7 @@ PlasmoidItem {
                         // La lateralisation est le critere decisif : on la met en avant,
                         // en rouge quand elle est trop faible pour placer quoi que ce soit.
                         PlasmaComponents.Label {
+                            visible: model.mesure
                             text: i18n("+%1 dB", model.lat)
                             font: Kirigami.Theme.smallFont
                             color: model.lat < 3 ? Kirigami.Theme.negativeTextColor
@@ -400,6 +407,7 @@ PlasmoidItem {
                                  : Kirigami.Theme.textColor
                         }
                         PlasmaComponents.Label {
+                            visible: model.mesure
                             text: i18n("%1 ms", model.reverb)
                             font: Kirigami.Theme.smallFont
                             opacity: 0.6

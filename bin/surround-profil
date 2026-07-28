@@ -123,6 +123,11 @@ installer_casque() {
 }
 
 # Sortie TSV pour l'applet Plasma : nom, usage, lat, reverb, commentaire, actif.
+#
+# Les profils livres par HeSuVi sont recenses dans .hesuvi : tout ce qui n'y
+# figure pas a ete ajoute par l'utilisateur — genere par spatial-sound-gen,
+# produit par ASH Toolset, ou simplement depose. Ces profils-la sont listes
+# a part, sans mesures, puisqu'on ne les a pas evalues.
 donnees() {
   local cur; cur="$(actuel)"
   for k in "${ORDRE[@]}"; do
@@ -130,6 +135,15 @@ donnees() {
     IFS='|' read -r usage lat rev note <<<"${INFO[$k]}"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$k" "$usage" "$lat" "$rev" "$note" \
       "$([[ "$k" == "$cur" ]] && echo 1 || echo 0)"
+  done
+  for f in "$HR"/*.wav; do
+    [[ -e "$f" ]] || continue
+    local n; n="$(basename "$f" .wav)"
+    [[ "$n" == hrir ]] && continue
+    [[ -n "${INFO[$n]+x}" ]] && continue
+    [[ -f "$HR/.hesuvi" ]] && grep -qxF "$n" "$HR/.hesuvi" && continue
+    printf '%s\tperso\t\t\t%s\t%s\n' "$n" "added by you" \
+      "$([[ "$n" == "$cur" ]] && echo 1 || echo 0)"
   done
 }
 

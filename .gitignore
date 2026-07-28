@@ -4,3 +4,4 @@ __pycache__/
 plasmoid/contents/locale/
 # HRIR optionnels deposes en local pour une installation hors ligne
 share/hrir/
+gen/target/

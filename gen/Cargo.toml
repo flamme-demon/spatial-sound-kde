@@ -1,0 +1,20 @@
+[package]
+name = "spatial-sound-gen"
+version = "0.3.0"
+edition = "2021"
+description = "Synthetise des reponses impulsionnelles binaurales de salle (BRIR) au format HeSuVi 14 canaux"
+license = "MIT"
+
+# Aucune dependance cargo : la seule brique externe est libmysofa, en C, liee
+# directement. Cela evite une chaine d'approvisionnement pour un binaire dont le
+# calcul tient en quelques centaines de lignes, et rend la compilation reproductible
+# hors ligne.
+[dependencies]
+
+[[bin]]
+name = "spatial-sound-gen"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
