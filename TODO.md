@@ -70,6 +70,21 @@ permettra aussi de confirmer que la barre de défilement a bien disparu.
 
 ---
 
+## Sink absent de l'applet de volume du panneau
+
+Voir #2. `module-filter-chain` force `object.register = "false"` sur le noeud, donc
+WirePlumber ne l'adopte pas et l'applet ne le liste pas — alors que la configuration
+systeme, qui enumere les sinks PulseAudio, l'affiche correctement.
+
+Ecarte par la mesure : forcer `object.register = true` (la propriete devient bien
+effective, sans effet), `node.dont-reconnect = false`, et charger la chaine dans le
+demon principal plutot que dans notre instance dediee.
+
+- [ ] Trouver la propriete qui fait adopter un noeud de filter-chain par
+      WirePlumber, ou confirmer en amont qu'il n'y en a pas.
+
+---
+
 ## Vérifications jamais faites
 
 - [ ] **Latence réelle de bout en bout.** `pactl` renvoie 0 µs, ce qui signifie

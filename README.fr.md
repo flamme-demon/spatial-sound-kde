@@ -230,6 +230,15 @@ localisant quasiment pas.
   Pour l'éviter, envoie ce flux seul vers le casque brut dans `pavucontrol`.
 - Latence ajoutée : de l'ordre d'un quantum PipeWire (~21 ms à 1024 @ 48 kHz).
   Réductible en abaissant le quantum si tu la ressens en jeu.
+- **Le sink n'apparaît pas dans l'applet de volume du panneau.** Il est bien visible
+  et sélectionnable dans *Configuration du système → Son*, et le son fonctionne
+  normalement. En cause : `module-filter-chain` crée le nœud avec
+  `object.register = "false"`, ce qui le tient hors du registre que consomme le
+  gestionnaire de session — `wpctl status` ne le liste pas non plus. Forcer
+  `object.register = true` ne change rien, et le charger dans le démon principal
+  plutôt que dans notre instance dédiée non plus : la limitation est en amont.
+  Pour changer de sortie par défaut, passe par la configuration système ou
+  `pactl set-default-sink`. Le choix des profils, lui, se fait dans notre applet.
 - Manjaro ne fournit pas de `pipewire-filter-chain.service` : `install.sh` écrit
   sa propre unité `spatial-sound.service`.
 

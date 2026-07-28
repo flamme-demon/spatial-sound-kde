@@ -229,6 +229,14 @@ pink-noise bursts, because a steady sine tone barely localises at all.
   `pavucontrol`.
 - Added latency is on the order of one PipeWire quantum (~21 ms at 1024 @ 48 kHz).
   Lower the quantum if you feel it in games.
+- **The sink does not appear in the panel volume applet.** It is visible and
+  selectable in *System Settings → Sound*, and audio works normally. Cause:
+  `module-filter-chain` creates the node with `object.register = "false"`, which
+  keeps it out of the registry the session manager consumes — `wpctl status` does
+  not list it either. Forcing `object.register = true` changes nothing, and neither
+  does loading the chain in the main daemon instead of our dedicated instance: the
+  limitation is upstream. To change the default output, use System Settings or
+  `pactl set-default-sink`. Profile switching goes through our own applet.
 - Manjaro ships no `pipewire-filter-chain.service`: `install.sh` writes its own
   `spatial-sound.service` unit.
 
