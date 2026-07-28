@@ -43,6 +43,51 @@ l'operation doit preserver l'energie totale ou non.
 
 ---
 
+## Parametres de salle (« ROOM PARAMETERS »)
+
+Spatial Sound Card expose des presets de salle editables. Chez nous, la salle est
+**figee dans le HRIR** : `ssc_ny`, `ssc_syd` et `atmos` embarquent chacun la leur, et
+aucun parametre n'est reglable. Changer de salle = changer de profil, donc changer en
+meme temps la lateralisation et le timbre.
+
+Deux voies, de cout tres inegal.
+
+### 1. Mise en forme de l'enveloppe — voir la section dediee ci-dessus
+
+Bon marche, mais ne touche qu'a la duree de la queue. Ni les angles, ni la taille de
+la piece, ni les premieres reflexions.
+
+### 2. Rendu parametrique par SOFA
+
+**Verifie le 2026-07-28 :** PipeWire livre un greffon SOFA utilisable directement.
+
+    /usr/lib/spa-0.2/filter-graph/libspa-filter-graph-plugin-sofa.so  (lie a libmysofa)
+    type = <ladspa | lv2 | builtin | sofa>   dans module-filter-chain
+    label « spatializer », controles Azimuth / Elevation / Radius
+
+Chaque enceinte virtuelle deviendrait un noeud `sofa` dont on pilote la position en
+continu, au lieu d'une convolution par une capture figee. C'est ce qui permettrait de
+vraies coordonnees de salle, et meme un suivi de tete plus tard.
+
+**Le piege, et il est serieux :** les jeux SOFA publics sont des HRTF **anechoiques**.
+On y gagne une localisation precise et reglable, on y perd toute la reverberation —
+or c'est elle qui externalise le son et le rend agreable. C'est exactement pourquoi
+les profils HeSuVi, avec leur salle incluse, sonnent plus « grands » qu'une HRTF nue.
+
+Une implementation credible demande donc les deux etages : `sofa` pour le son direct,
+plus une reverberation de synthese (premieres reflexions + queue) a construire. C'est
+un second moteur de rendu a cote de l'existant, pas une option a ajouter.
+
+A verifier avant de s'engager :
+
+- [ ] Instancier un noeud `sofa` et confirmer que les controles sont pilotables a
+      chaud, sans recharger la chaine.
+- [ ] Trouver un jeu SOFA libre et convenable (MIT KEMAR, SADIE II, ARI).
+- [ ] Comparer a l'ecoute contre `cmss_game` : si la HRTF nue sonne moins bien que
+      les captures HeSuVi, la voie ne vaut d'etre poursuivie qu'avec la reverberation.
+
+---
+
 ## Empaquetage AUR
 
 `paru -S spatial-sound-kde` plutôt qu'un clone git. C'est ce qui manque pour que le
