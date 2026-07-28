@@ -143,9 +143,10 @@ surround-profil --casque-aucune               # revenir à aucune correction
 ```
 
 Le filtre est téléchargé à la demande depuis [AutoEQ](https://github.com/jaakkopasanen/AutoEq),
-en FIR à phase minimale 48 kHz — notre fréquence, donc sans rééchantillonnage. L'applet
-propose au pied de sa fenêtre les corrections déjà téléchargées ; en ajouter une passe
-par la ligne de commande.
+en FIR à phase minimale 48 kHz — notre fréquence, donc sans rééchantillonnage. Au pied de la fenêtre de l'applet, un champ cherche dans les 8850 entrées à partir de
+trois caractères : une coche signale les filtres déjà présents, un « + » ceux à
+télécharger. Champ vide, il liste ce qui est installé. Le bouton à droite retire la
+correction.
 
 **Une correction ne vaut que pour le modèle mesuré.** En appliquer une prévue pour un
 autre casque creuse un pic qui n'existe pas et dégrade le rendu. Aucune n'est donc

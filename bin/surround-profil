@@ -146,6 +146,23 @@ casques_installes() {
   done
 }
 
+# Recherche destinee a l'applet : nom, source, et si le filtre est deja
+# telecharge. Le nombre de resultats est borne pour rester fluide au clavier,
+# l'index comptant pres de 9000 entrees.
+chercher_data() {
+  [[ -f "$HP/index.tsv" ]] || return 0
+  # La liste des filtres deja telecharges est passee en premier fichier a awk :
+  # tester chaque resultat avec system("test -f") lancait un processus par ligne,
+  # soit 149 ms pour 100 resultats — bien trop pour une recherche au clavier.
+  awk -F'\t' -v m="$1" -v max=500 '
+    NR == FNR { installe[$0] = 1; next }
+    !/^#/ && tolower($1) ~ tolower(m) {
+      printf "%s\t%s\t%s\n", $1, $3, ($1 in installe) ? 1 : 0
+      if (++n >= max) exit
+    }' <(cd "$HP" 2>/dev/null && ls -1 *.wav 2>/dev/null | sed 's/\.wav$//') \
+       "$HP/index.tsv"
+}
+
 usage_txt() {
   printf 'Usage : surround-profil [<profil>|-l|-a|--status]\n'
   printf '        surround-profil --casque <nom> | --casque-chercher <motif> | --casque-aucune\n\n'
@@ -177,6 +194,7 @@ case "${1-}" in
   --casque-actuel)      casque_actif; exit 0 ;;
   --casque-chercher)    chercher_casque "${2:?motif attendu}"; exit 0 ;;
   --casque-data)        casques_installes; exit 0 ;;
+  --casque-chercher-data) chercher_data "${2-}"; exit 0 ;;
   --status)        pactl list sinks short 2>/dev/null | grep -q "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
   -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \

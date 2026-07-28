@@ -143,9 +143,10 @@ surround-profil --casque-aucune               # back to no correction
 ```
 
 The filter is fetched on demand from [AutoEQ](https://github.com/jaakkopasanen/AutoEq)
-as a minimum-phase FIR at 48 kHz — our rate, so no resampling. The applet offers the
-already-downloaded corrections at the foot of its popup; adding a new one goes through
-the command line.
+as a minimum-phase FIR at 48 kHz — our rate, so no resampling. At the foot of the applet popup, a field searches the 8850 entries from three
+characters on: a checkmark marks filters already present, a « + » those to be
+downloaded. Left empty, it lists what is installed. The button on the right removes
+the correction.
 
 **A correction is only valid for the model it was measured on.** Applying one meant for
 another headphone carves out a peak that is not there and degrades the result. None is

@@ -64,6 +64,20 @@ msgstr "dB = capacité à placer les sons · ms = plus c'est long, plus c'est lo
 msgid "Headphone:"
 msgstr "Casque :"
 
+#: contents/ui/main.qml
+msgid "search a headphone…"
+msgstr "rechercher un casque…"
+
+#: contents/ui/main.qml
+msgid "Type at least %1 character"
+msgid_plural "Type at least %1 characters"
+msgstr[0] "Saisis au moins %1 caractère"
+msgstr[1] "Saisis au moins %1 caractères"
+
+#: contents/ui/main.qml
+msgid "Remove the correction"
+msgstr "Retirer la correction"
+
 # Commentaires de profils. Ils arrivent depuis surround-profil --data en anglais :
 # xgettext ne peut pas les extraire, ils sont donc listes a la main.
 msgid "best overall compromise"

@@ -17,9 +17,9 @@ Reste ouvert :
 - [ ] Ajouter [ASH Toolset](https://github.com/ShanonPearce/ASH-Toolset) comme
       seconde source : ses filtres visent une cible champ diffus, differente de
       celle d'AutoEQ.
-- [ ] L'applet ne propose que les corrections deja telechargees. Une recherche
-      dans les 8850 entrees depuis l'interface demanderait un champ de saisie,
-      donc de la hauteur — or la liste des profils en manque deja.
+- [x] ~~L'applet ne propose que les corrections deja telechargees.~~ Fait en 0.2.1 :
+      un champ de recherche coute la meme ligne qu'un menu deroulant, et les
+      resultats flottent au-dessus sans consommer de hauteur.
 
 ---
 

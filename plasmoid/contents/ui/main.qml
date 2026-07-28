@@ -17,7 +17,15 @@ PlasmoidItem {
     property string profilActuel: "…"
     property bool sinkActif: false
     property bool occupe: false
-    property int casqueIndex: 0
+    property string casqueActif: "aucune"
+    property string indiceRecherche: ""
+
+    // En deca de ce seuil, une recherche renverrait des centaines d'entrees sans
+    // interet et lancerait un processus a chaque frappe.
+    readonly property int minCaracteres: 3
+    // Au-dela, on fait defiler plutot que d'agrandir : la fenetre du plasmoide
+    // est deja juste en hauteur.
+    readonly property int maxLignesVisibles: 8
 
     Plasma5Support.DataSource {
         id: shell
@@ -44,6 +52,7 @@ PlasmoidItem {
 
     ListModel { id: modeleProfils }
     ListModel { id: modeleCasques }
+    ListModel { id: modeleRecherche }
 
     function rafraichir() {
         shell.lancer("--data", function (sortie) {
@@ -65,15 +74,47 @@ PlasmoidItem {
         });
         shell.lancer("--casque-data", function (sortie) {
             modeleCasques.clear();
-            let actif = 0;
             for (const ligne of sortie.split("\n")) {
                 if (!ligne) continue;
                 const c = ligne.split("\t");
                 if (c.length < 2) continue;
-                if (c[1] === "1") actif = modeleCasques.count;
+                if (c[1] === "1") root.casqueActif = c[0];
                 modeleCasques.append({ nom: c[0] });
             }
-            root.casqueIndex = actif;
+        });
+    }
+
+    // Champ vide : on montre ce qui est deja telecharge. Des qu'on tape, on
+    // interroge l'index complet des 8850 casques mesures. Un seul champ couvre
+    // donc les deux usages, sans occuper de hauteur supplementaire.
+    function rechercherCasques(motif) {
+        if (motif.indexOf('"') >= 0 || motif.indexOf("'") >= 0) return;
+        if (motif.length > 0 && motif.length < minCaracteres) {
+            modeleRecherche.clear();
+            root.indiceRecherche = i18np("Type at least %1 character",
+                                         "Type at least %1 characters", minCaracteres);
+            return;
+        }
+        root.indiceRecherche = "";
+        if (motif.length === 0) {
+            modeleRecherche.clear();
+            for (let i = 0; i < modeleCasques.count; i++) {
+                modeleRecherche.append({
+                    nom: modeleCasques.get(i).nom, source: "", installe: true
+                });
+            }
+            return;
+        }
+        shell.lancer('--casque-chercher-data "' + motif + '"', function (sortie) {
+            modeleRecherche.clear();
+            for (const ligne of sortie.split("\n")) {
+                if (!ligne) continue;
+                const c = ligne.split("\t");
+                if (c.length < 3) continue;
+                modeleRecherche.append({
+                    nom: c[0], source: c[1], installe: c[2] === "1"
+                });
+            }
         });
     }
 
@@ -192,13 +233,110 @@ PlasmoidItem {
                         font: Kirigami.Theme.smallFont
                         opacity: 0.8
                     }
-                    PlasmaComponents.ComboBox {
+
+                    PlasmaComponents.TextField {
+                        id: champCasque
                         Layout.fillWidth: true
-                        model: modeleCasques
-                        textRole: "nom"
-                        enabled: !root.occupe && modeleCasques.count > 1
-                        currentIndex: root.casqueIndex
-                        onActivated: (i) => root.basculerCasque(modeleCasques.get(i).nom)
+                        enabled: !root.occupe
+                        placeholderText: root.casqueActif === "aucune"
+                            ? i18n("search a headphone…")
+                            : root.casqueActif
+
+                        // La recherche part sur pause de frappe : sans cela chaque
+                        // caractere lancerait un processus.
+                        Timer {
+                            id: attente
+                            interval: 250
+                            onTriggered: root.rechercherCasques(champCasque.text)
+                        }
+                        onTextChanged: attente.restart()
+                        onActiveFocusChanged: if (activeFocus) {
+                            root.rechercherCasques(text);
+                            listeCasques.open();
+                        }
+
+                        QQC.Popup {
+                            id: listeCasques
+                            y: -height - Kirigami.Units.smallSpacing
+                            width: champCasque.width
+                            // Les resultats flottent au-dessus du champ : ils ne
+                            // prennent aucune hauteur dans la mise en page, qui est
+                            // deja juste.
+                            readonly property real hauteurLigne:
+                                Math.max(1, vueCasques.count) > 0 && vueCasques.contentHeight > 0
+                                    ? vueCasques.contentHeight / Math.max(1, vueCasques.count)
+                                    : Kirigami.Units.gridUnit * 2
+                            height: root.indiceRecherche !== ""
+                                ? Kirigami.Units.gridUnit * 2
+                                : Math.min(hauteurLigne * root.maxLignesVisibles,
+                                           vueCasques.contentHeight) + 2
+                            padding: 1
+                            visible: champCasque.activeFocus
+                                     && (modeleRecherche.count > 0 || root.indiceRecherche !== "")
+
+                            PlasmaComponents.Label {
+                                anchors.centerIn: parent
+                                width: parent.width - Kirigami.Units.largeSpacing
+                                visible: root.indiceRecherche !== ""
+                                text: root.indiceRecherche
+                                font: Kirigami.Theme.smallFont
+                                opacity: 0.7
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                            }
+
+                            contentItem: ListView {
+                                id: vueCasques
+                                clip: true
+                                visible: root.indiceRecherche === ""
+                                model: modeleRecherche
+                                boundsBehavior: Flickable.StopAtBounds
+                                QQC.ScrollBar.vertical: QQC.ScrollBar {
+                                    policy: QQC.ScrollBar.AsNeeded
+                                }
+                                delegate: PlasmaComponents.ItemDelegate {
+                                    width: ListView.view.width
+                                    onClicked: {
+                                        root.basculerCasque(model.nom);
+                                        champCasque.text = "";
+                                        champCasque.focus = false;
+                                    }
+                                    contentItem: RowLayout {
+                                        spacing: Kirigami.Units.smallSpacing
+                                        PlasmaComponents.Label {
+                                            text: model.nom
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        PlasmaComponents.Label {
+                                            text: model.source
+                                            visible: model.source !== ""
+                                            font: Kirigami.Theme.smallFont
+                                            opacity: 0.6
+                                            elide: Text.ElideRight
+                                            Layout.maximumWidth: parent.width * 0.35
+                                        }
+                                        // « + » signale un filtre a telecharger,
+                                        // la coche un filtre deja present.
+                                        Kirigami.Icon {
+                                            source: model.installe ? "checkmark" : "list-add"
+                                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    PlasmaComponents.ToolButton {
+                        icon.name: "edit-clear"
+                        enabled: !root.occupe && root.casqueActif !== "aucune"
+                        display: PlasmaComponents.AbstractButton.IconOnly
+                        onClicked: root.basculerCasque("aucune")
+                        PlasmaComponents.ToolTip.text: i18n("Remove the correction")
+                        PlasmaComponents.ToolTip.visible: hovered
+                        PlasmaComponents.ToolTip.delay: 700
                     }
                 }
             }
