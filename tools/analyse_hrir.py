@@ -59,6 +59,15 @@ for nom in CANDIDATS:
     d = np.atleast_2d(np.asarray(raw))
     if d.shape[1] != 14:   # seuls les WAV HeSuVi 14 canaux nous interessent
         continue
+    # Un fichier porteur de NaN ou de valeurs hors bornes produirait des mesures
+    # « nan » silencieuses. Mieux vaut le nommer : convolue, il enverrait des
+    # salves tres fortes dans le casque.
+    brut = d.astype(np.float64)
+    if not np.isfinite(brut).all() or np.abs(brut[np.isfinite(brut)]).max() > 8.0 * (
+        1 if np.issubdtype(d.dtype, np.floating) else np.iinfo(d.dtype).max
+    ):
+        print(f"{nom:<14}  FICHIER CORROMPU — valeurs non finies ou hors bornes")
+        continue
     d = d.astype(float) / 32768
     # canal 6 = FC vers oreille gauche : la source frontale, la plus revelatrice
     fc = d[:, 6]

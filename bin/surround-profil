@@ -274,6 +274,40 @@ if command -v ffprobe >/dev/null; then
   [[ "$CH" == 14 ]] || { echo "« $NEW » a $CH canaux, il en faut 14." >&2; exit 1; }
 fi
 
+# Controle du CONTENU, et pas seulement du format. Un fichier porteur de NaN ou de
+# valeurs hors bornes fait produire au convolueur des echantillons aberrants : le
+# resultat est une salve tres forte dans le casque, sans le moindre message
+# d'erreur. Verifier le nombre de canaux ne protege pas de cela.
+if python3 -c "import numpy, scipy.io" 2>/dev/null; then
+  VERDICT="$(python3 - "$HR/$NEW.wav" <<'CONTROLE'
+import sys, warnings
+warnings.filterwarnings("ignore")
+import numpy as np
+np.seterr(all="ignore")
+from scipy.io import wavfile
+try:
+    _, d = wavfile.read(sys.argv[1])
+except Exception as e:
+    print(f"illisible : {e}"); sys.exit(0)
+a = np.asarray(d)
+x = a.astype(np.float64) if not np.issubdtype(a.dtype, np.integer) \
+    else a.astype(np.float64) / np.iinfo(a.dtype).max
+nf = int((~np.isfinite(x)).sum())
+if nf:
+    print(f"{nf} echantillon(s) non finis (NaN ou infini)"); sys.exit(0)
+crete = float(np.abs(x).max())
+if crete > 8.0:
+    print(f"crete a {crete:.3g}, hors de toute plage plausible")
+CONTROLE
+)"
+  if [[ -n "$VERDICT" ]]; then
+    echo "« $NEW » est inexploitable : $VERDICT" >&2
+    echo "Le convoluer produirait des salves tres fortes dans le casque." >&2
+    echo "Profil inchange." >&2
+    exit 1
+  fi
+fi
+
 echo "$NEW" > "$BASE_F"
 appliquer
 recharger
