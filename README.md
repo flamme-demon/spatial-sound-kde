@@ -11,7 +11,7 @@ system, each virtual speaker is convolved with a pair of measured head-related
 impulse responses (HRIR), and the result is mixed down to stereo for headphones.
 
 <p align="center">
-  <img src="docs/applet.png" alt="The Plasma applet listing profiles with their measurements" width="380">
+  <img src="docs/applet.png" alt="The Plasma applet: profiles grouped by use case with their measurements, headphone correction picker and reverberation control" width="380">
 </p>
 
 ## What it actually does

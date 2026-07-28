@@ -11,7 +11,7 @@ dans le système, chaque enceinte virtuelle est convoluée par une paire de rép
 impulsionnelles (HRIR) mesurées, et le résultat est mixé en stéréo pour le casque.
 
 <p align="center">
-  <img src="docs/applet.png" alt="L'applet Plasma listant les profils avec leurs mesures" width="380">
+  <img src="docs/applet.png" alt="L'applet Plasma : profils groupés par usage avec leurs mesures, sélecteur de correction de casque et réglage de réverbération" width="380">
 </p>
 
 ## Ce que ça fait concrètement
