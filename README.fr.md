@@ -113,7 +113,7 @@ contenu**. `tools/analyse_hrir.py` les mesure :
 | `sonic` | 16 ms | +11 dB | très sec |
 | `EAC_Default` | 3 ms | +9 dB | le plus sec (44,1 kHz) |
 | `atmos` | 46 ms | +12 dB | cinéma, ample |
-| `ssc_ny` / `ssc_syd` | 42 / 99 ms | +9 / +14 dB | salles de Spatial Sound Card (New York, Sydney) |
+| `ssc_ny` / `ssc_hù` / `ssc_syd` | 42 / 105 / 99 ms | +9 / +12 / +14 dB | salles de Spatial Sound Card |
 | `dh+` | 109 ms | +3 dB | très réverbérant malgré sa réputation FPS |
 | `dvs` | 21 ms | **+2 dB** | à éviter — ne latéralise pas |
 
@@ -204,6 +204,13 @@ active par défaut.
 
 Le niveau global baisse d'environ 3 à 4 dB une fois la correction active : c'est la
 réserve que le filtre garde pour ses remontées, pas une perte de qualité.
+
+Les profils `ssc_*` sont des captures des salles de *Spatial Sound Card*, qui en
+propose six : Paris, Dubaï, Shanghai, Sydney, Reykjavik et New York. HeSuVi n'en a
+retenu que quatre — Paris et Reykjavik manquent.
+
+`ssc_hù` porte l'abréviation chinoise de Shanghai, 沪 (*Hù*), d'où ce nom de fichier
+inattendu. C'est une déduction, pas une information de l'éditeur.
 
 ## Tester
 

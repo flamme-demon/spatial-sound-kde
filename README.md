@@ -113,7 +113,7 @@ Profiles are not equivalent, and **their reputation does not match their content
 | `sonic` | 16 ms | +11 dB | very dry |
 | `EAC_Default` | 3 ms | +9 dB | driest (44.1 kHz) |
 | `atmos` | 46 ms | +12 dB | cinema, spacious |
-| `ssc_ny` / `ssc_syd` | 42 / 99 ms | +9 / +14 dB | Spatial Sound Card rooms (New York, Sydney) |
+| `ssc_ny` / `ssc_hù` / `ssc_syd` | 42 / 105 / 99 ms | +9 / +12 / +14 dB | Spatial Sound Card rooms |
 | `dh+` | 109 ms | +3 dB | very reverberant despite its FPS reputation |
 | `dvs` | 21 ms | **+2 dB** | avoid — does not lateralise |
 
@@ -203,6 +203,13 @@ active by default.
 
 Overall level drops by roughly 3–4 dB once a correction is active: that is the headroom
 the filter reserves for its boosts, not a loss of quality.
+
+The `ssc_*` profiles are captures of *Spatial Sound Card* rooms. The product offers
+six — Paris, Dubai, Shanghai, Sydney, Reykjavik and New York — of which HeSuVi kept
+only four; Paris and Reykjavik are missing.
+
+`ssc_hù` carries the Chinese abbreviation for Shanghai, 沪 (*Hù*), hence the
+unexpected filename. That is a deduction, not information from the vendor.
 
 ## Testing
 
