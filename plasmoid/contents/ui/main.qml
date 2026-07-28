@@ -243,9 +243,21 @@ PlasmoidItem {
                         id: champCasque
                         Layout.fillWidth: true
                         enabled: !root.occupe
-                        placeholderText: root.casqueActif === "aucune"
-                            ? i18n("search a headphone…")
-                            : root.casqueActif
+                        // La correction active s'affiche en texte plein, pas en
+                        // texte de substitution : celui-ci est gris pale et se lit
+                        // comme un champ vide, ce qui masquait l'etat courant.
+                        placeholderText: i18n("search a headphone…")
+
+                        function refleterEtat() {
+                            text = root.casqueActif === "aucune" ? "" : root.casqueActif;
+                        }
+                        Component.onCompleted: refleterEtat()
+                        Connections {
+                            target: root
+                            function onCasqueActifChanged() {
+                                if (!champCasque.activeFocus) champCasque.refleterEtat();
+                            }
+                        }
 
                         // La recherche part sur pause de frappe : sans cela chaque
                         // caractere lancerait un processus.
@@ -255,9 +267,16 @@ PlasmoidItem {
                             onTriggered: root.rechercherCasques(champCasque.text)
                         }
                         onTextChanged: attente.restart()
-                        onActiveFocusChanged: if (activeFocus) {
-                            root.rechercherCasques(text);
-                            listeCasques.open();
+                        onActiveFocusChanged: {
+                            if (activeFocus) {
+                                // Le nom affiche est selectionne : taper le remplace
+                                // au lieu de s'y ajouter.
+                                selectAll();
+                                root.rechercherCasques("");
+                                listeCasques.open();
+                            } else {
+                                refleterEtat();
+                            }
                         }
 
                         QQC.Popup {
@@ -303,7 +322,8 @@ PlasmoidItem {
                                     width: ListView.view.width
                                     onClicked: {
                                         root.basculerCasque(model.nom);
-                                        champCasque.text = "";
+                                        // Pas de vidage : la perte du focus remet
+                                        // le champ sur la correction desormais active.
                                         champCasque.focus = false;
                                     }
                                     contentItem: RowLayout {
