@@ -130,6 +130,30 @@ la plus faible du lot (0,7 dB) précisément parce qu'il ne filtre presque rien 
 ne latéralise pas. Une réponse trop plate est un signal d'alarme, pas un gage de
 neutralité.
 
+## Correction de casque
+
+Couche **distincte** des profils ci-dessus, et cumulable avec eux : un profil HRIR
+*place* les sons autour de la tête, une correction de casque *compense la réponse en
+fréquence de ton modèle*. Elle ne déplace rien.
+
+```bash
+surround-profil --casque-chercher hyperx      # cherche parmi 8850 casques mesurés
+surround-profil --casque "HyperX Cloud Flight S"
+surround-profil --casque-aucune               # revenir à aucune correction
+```
+
+Le filtre est téléchargé à la demande depuis [AutoEQ](https://github.com/jaakkopasanen/AutoEq),
+en FIR à phase minimale 48 kHz — notre fréquence, donc sans rééchantillonnage. L'applet
+propose au pied de sa fenêtre les corrections déjà téléchargées ; en ajouter une passe
+par la ligne de commande.
+
+**Une correction ne vaut que pour le modèle mesuré.** En appliquer une prévue pour un
+autre casque creuse un pic qui n'existe pas et dégrade le rendu. Aucune n'est donc
+active par défaut.
+
+Le niveau global baisse d'environ 3 à 4 dB une fois la correction active : c'est la
+réserve que le filtre garde pour ses remontées, pas une perte de qualité.
+
 ## Tester
 
 ```bash
@@ -171,6 +195,7 @@ localisant quasiment pas.
 ~/.config/pipewire/filter-chain.conf.d/99-spatial-sound.conf          graphe de convolution
 ~/.config/systemd/user/spatial-sound.service                         instance dédiée
 ~/.local/share/pipewire/hrir_hesuvi/                                 profils HRIR
+~/.local/share/pipewire/hpcf/                                        corrections de casque + index
 ~/.local/share/pipewire/tests-surround/                              outils de mesure/test
 ~/.local/bin/surround-profil                                         sélecteur de profil
 ~/.local/share/plasma/plasmoids/org.spatialsound.kde/                applet Plasma (KDE)

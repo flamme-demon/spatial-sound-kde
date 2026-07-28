@@ -4,81 +4,22 @@ Pistes ouvertes, par ordre d'intérêt décroissant.
 
 ---
 
-## Correction de casque (HpCF)
+## ~~Correction de casque (HpCF)~~ — fait en 0.2.0
 
-**Ajouter une seconde étape de convolution, après le mixage binaural, pour compenser
-la réponse en fréquence du casque.**
+Livre : etage de convolution apres le mixage binaural, index des 8850 casques
+mesures par AutoEQ, telechargement a la demande, selecteur dans l'applet.
 
-C'est une couche distincte de ce que fait le projet aujourd'hui, et les deux se
-cumulent :
+Reste ouvert :
 
-| | actuel | à ajouter |
-|---|---|---|
-| rôle | **placer** les sons autour de la tête | **corriger** la couleur du casque |
-| données | HRIR 14 canaux (HeSuVi) | filtre FIR mono (HpCF) |
-| dépend de | rien de matériel | le modèle exact de casque |
-
-C'est ce que les gens désignent quand ils parlent d'un « profil beyerdynamic » : une
-courbe qui aplatit le pic d'aigus des DT 770 / DT 990. Aucun des 59 profils HeSuVi
-n'est un modèle de casque — ce sont tous des captures de virtualiseurs.
-
-### Implémentation
-
-Deux convolueurs supplémentaires en sortie du mixeur, un par oreille :
-
-```
-… → mixL → convHpCF_L → sortie G
-… → mixR → convHpCF_R → sortie D
-```
-
-L'ordre compte : spatialisation **puis** correction. Le graphe existant n'a pas
-besoin d'être touché, seulement prolongé.
-
-Point de comparaison utile : Spatial Sound Card lui-meme n'expose que **quatre**
-entrees dans son menu « HEADPHONE EQ » (DT 770M, DT 880 PRO, Default, Beats Pro).
-Une implementation adossee a ASH ou AutoEQ couvrirait des centaines de modeles, donc
-depasserait le produit commercial sur cet axe precis.
-
-Source de filtres : [ASH Toolset](https://github.com/ShanonPearce/ASH-Toolset) —
-FIR à phase minimale, 1024 points, WAV mono 44,1 kHz, couvrant AKG, Audeze,
-Audio-Technica, Beyerdynamic, HiFiMAN, Sennheiser et d'autres.
-Alternative : [AutoEQ](https://autoeq.app/).
-
-### Verifie le 2026-07-28
-
-- [x] **Le HyperX Cloud Flight S est mesure.** Present dans AutoEQ, mesure Rtings
-      (HMS II.3), sous `results/Rtings/HMS II.3 over-ear/HyperX Cloud Flight S/`.
-- [x] **Pas de reechantillonnage a prevoir** : AutoEQ publie un FIR a phase minimale
-      directement en **48 kHz**, notre frequence. Fichier WAV stereo, 4800
-      echantillons (100 ms), 16 bits.
-      Reponse mesuree du filtre : +4,8 dB dans 200-500 Hz, +4,3 dB dans 3-5 kHz,
-      -3,3 dB au-dessus de 10 kHz. Correction credible pour un casque de jeu au
-      medium creuse et aux aigus chauds.
-- [x] La phase minimale concentre l'energie en debut de reponse : la latence de la
-      convolution partitionnee depend du bloc, pas de la longueur du FIR. Les
-      4800 points n'ajoutent donc pas 100 ms.
-
-### Reste a trancher
-- [ ] Un HpCF mal choisi **dégrade** le son : appliquer une correction DT 990 à un
-      autre casque creuse un pic qui n'existe pas. Prévoir un avertissement explicite,
-      et surtout ne pas en activer un par défaut.
-- [ ] **Comment distribuer le catalogue.** AutoEQ compte ~700 casques et 52 000
-      fichiers : impossible a embarquer. Deux pistes — generer un index nom -> chemin
-      une fois et telecharger le WAV a la demande, ou se contenter d'un
-      `--hpcf-file <chemin>` que l'utilisateur alimente lui-meme.
-      L'index est le seul moyen d'avoir un menu deroulant utilisable dans l'applet.
-
-### Integration dans l'applet
-
-Le graphe et le script sont la partie facile : deux convolueurs de plus apres le
-mixeur, un symlink `hpcf.wav` sur le modele de `hrir.wav`, et `surround-profil`
-gagne `--hpcf <nom>` / `--hpcf-none`. Le rechargement reste celui du service dedie,
-donc toujours 0,15 s.
-
-Cote applet, la difficulte n'est pas technique mais de mise en page : la liste des
-profils occupe deja toute la hauteur disponible. Un menu deroulant « Casque » dans le
-pied de fenetre, la ou vit la legende, coute une seule ligne et ne touche pas a la
-liste. C'est la piste a suivre — surtout pas une seconde liste.
+- [ ] L'index n'expose que les filtres **48 kHz** d'AutoEQ. Les jeux publies
+      uniquement en 44,1 kHz sont donc invisibles — a rendre accessibles si le
+      convolueur PipeWire sait reechantillonner, ce qui n'a pas ete verifie.
+- [ ] Ajouter [ASH Toolset](https://github.com/ShanonPearce/ASH-Toolset) comme
+      seconde source : ses filtres visent une cible champ diffus, differente de
+      celle d'AutoEQ.
+- [ ] L'applet ne propose que les corrections deja telechargees. Une recherche
+      dans les 8850 entrees depuis l'interface demanderait un champ de saisie,
+      donc de la hauteur — or la liste des profils en manque deja.
 
 ---
 

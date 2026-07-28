@@ -11,6 +11,7 @@ set -euo pipefail
 
 PROJET="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HRIR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
+HPCF_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
 # La chaine tourne dans une instance PipeWire dediee, pas dans le serveur
 # principal : la recharger pour changer de profil devient instantane et
 # n'interrompt aucun autre flux audio.
@@ -106,9 +107,9 @@ if (( BASH_VERSINFO[0] < 4 )); then
   mourir "bash ${BASH_VERSION} trop ancien : bash 4.0 minimum (tableaux associatifs)."
 fi
 
-for outil in pactl paplay systemctl; do
+for outil in pactl paplay systemctl python3; do
   command -v "$outil" >/dev/null \
-    || mourir "$outil introuvable — requis. (pactl/paplay : libpulse ; systemctl : systemd)"
+    || mourir "$outil introuvable — requis. (pactl/paplay : libpulse ; systemctl : systemd ; python3)"
 done
 
 SERVEUR="$(pactl info 2>/dev/null | sed -n 's/^Server Name: //p')"
@@ -228,6 +229,31 @@ fi
 ln -sfn "$HRIR_DIR/$PROFIL_DEFAUT.wav" "$HRIR_DIR/hrir.wav"
 vert "  profil initial : $PROFIL_DEFAUT"
 
+# -------------------------------------------------- correction de casque (HpCF)
+titre "Correction de casque"
+mkdir -p "$HPCF_DIR"
+
+# Impulsion unite : convoluer par elle ne modifie rien. C'est la valeur « aucune
+# correction », et elle doit exister meme si l'utilisateur n'installe jamais de
+# filtre, car l'etage de convolution est toujours present dans le graphe.
+if [[ ! -f "$HPCF_DIR/aucune.wav" ]]; then
+  python3 - "$HPCF_DIR/aucune.wav" <<'IMPULSION'
+import struct, sys, wave
+with wave.open(sys.argv[1], "wb") as w:
+    w.setnchannels(2); w.setsampwidth(2); w.setframerate(48000)
+    w.writeframes(struct.pack("<hh", 32767, 32767))
+IMPULSION
+  vert "  impulsion neutre generee"
+fi
+
+# On ne choisit jamais de correction a la place de l'utilisateur : un filtre prevu
+# pour un autre casque degrade le son au lieu de l'ameliorer.
+[[ -e "$HPCF_DIR/hpcf.wav" ]] || ln -sfn "$HPCF_DIR/aucune.wav" "$HPCF_DIR/hpcf.wav"
+vert "  correction active : $(basename "$(readlink -f "$HPCF_DIR/hpcf.wav")" .wav)"
+
+install -m644 "$PROJET/share/hpcf-index.tsv" "$HPCF_DIR/index.tsv"
+vert "  index : $(grep -vc '^#' "$HPCF_DIR/index.tsv") casques mesures (AutoEQ)"
+
 # ---------------------------------------------------------------- configuration
 titre "Configuration du sink virtuel"
 mkdir -p "$CONF_DIR"
@@ -285,6 +311,17 @@ CANAUX
   cat <<'PIED'
                     { type = builtin label = mixer name = mixL }
                     { type = builtin label = mixer name = mixR }
+PIED
+
+  # Correction de casque (HpCF), apres la spatialisation : cet etage compense la
+  # reponse du casque, il ne place rien. Il est TOUJOURS present dans le graphe et
+  # pointe par defaut sur une impulsion unite, mathematiquement neutre. Cela evite
+  # deux formes de configuration a maintenir : changer de correction se resume a
+  # deplacer le lien symbolique hpcf.wav, exactement comme pour hrir.wav.
+  printf '                    { type = builtin label = convolver name = convHP_L config = { filename = "%s" channel = 0 } }\n' "$HPCF_DIR/hpcf.wav"
+  printf '                    { type = builtin label = convolver name = convHP_R config = { filename = "%s" channel = 1 } }\n' "$HPCF_DIR/hpcf.wav"
+
+  cat <<'PIED' 
                 ]
                 links = [
                     { output = "copyFL:Out"  input="convFL_L:In"  }
@@ -320,9 +357,11 @@ CANAUX
                     { output = "convRR_L:Out"  input="mixL:In 7" }
                     { output = "convLFE_R:Out" input="mixR:In 8" }
                     { output = "convLFE_L:Out" input="mixL:In 8" }
+                    { output = "mixL:Out" input="convHP_L:In" }
+                    { output = "mixR:Out" input="convHP_R:In" }
                 ]
                 inputs  = [ "copyFL:In" "copyFR:In" "copyFC:In" "copyLFE:In" "copyRL:In" "copyRR:In", "copySL:In", "copySR:In" ]
-                outputs = [ "mixL:Out" "mixR:Out" ]
+                outputs = [ "convHP_L:Out" "convHP_R:Out" ]
             }
             capture.props = {
                 node.name      = "effect_input.virtual-surround-7.1-hesuvi"

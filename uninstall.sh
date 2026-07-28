@@ -4,6 +4,7 @@ set -euo pipefail
 
 HRIR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
 TEST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/tests-surround"
+HPCF_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/filter-chain.conf.d/99-spatial-sound.conf"
 CONF_ANCIEN="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/99-spatial-sound.conf"
 UNITE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/spatial-sound.service"
@@ -55,9 +56,9 @@ for d in "$PLASMOIDS/org.spatialsound.kde" \
   fi
 done
 if [[ $TOUT -eq 1 ]]; then
-  rm -rfv "$HRIR_DIR" "$TEST_DIR" "$ETAT"
+  rm -rfv "$HRIR_DIR" "$TEST_DIR" "$HPCF_DIR" "$ETAT"
 else
-  echo "HRIR et fichiers de test conserves ($HRIR_DIR)."
+  echo "HRIR, corrections de casque et fichiers de test conserves."
   echo "Pour tout effacer : ./uninstall.sh --tout"
 fi
 

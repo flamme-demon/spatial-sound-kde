@@ -130,6 +130,30 @@ the whole set (0.7 dB) precisely because it filters almost nothing — and there
 does not lateralise. An overly flat response is a warning sign, not a guarantee of
 neutrality.
 
+## Headphone correction
+
+A layer **distinct** from the profiles above, and complementary to them: an HRIR
+profile *places* sounds around your head, a headphone correction *compensates your
+model's frequency response*. It moves nothing.
+
+```bash
+surround-profil --casque-chercher hyperx      # search among 8850 measured headphones
+surround-profil --casque "HyperX Cloud Flight S"
+surround-profil --casque-aucune               # back to no correction
+```
+
+The filter is fetched on demand from [AutoEQ](https://github.com/jaakkopasanen/AutoEq)
+as a minimum-phase FIR at 48 kHz — our rate, so no resampling. The applet offers the
+already-downloaded corrections at the foot of its popup; adding a new one goes through
+the command line.
+
+**A correction is only valid for the model it was measured on.** Applying one meant for
+another headphone carves out a peak that is not there and degrades the result. None is
+active by default.
+
+Overall level drops by roughly 3–4 dB once a correction is active: that is the headroom
+the filter reserves for its boosts, not a loss of quality.
+
 ## Testing
 
 ```bash
@@ -171,6 +195,7 @@ pink-noise bursts, because a steady sine tone barely localises at all.
 ~/.config/pipewire/filter-chain.conf.d/99-spatial-sound.conf          convolution graph
 ~/.config/systemd/user/spatial-sound.service                          dedicated instance
 ~/.local/share/pipewire/hrir_hesuvi/                                  HRIR profiles
+~/.local/share/pipewire/hpcf/                                          headphone corrections + index
 ~/.local/share/pipewire/tests-surround/                               measurement/test tools
 ~/.local/bin/surround-profil                                          profile selector
 ~/.local/share/plasma/plasmoids/org.spatialsound.kde/                 Plasma applet (KDE)

@@ -17,6 +17,7 @@ PlasmoidItem {
     property string profilActuel: "…"
     property bool sinkActif: false
     property bool occupe: false
+    property int casqueIndex: 0
 
     Plasma5Support.DataSource {
         id: shell
@@ -42,6 +43,7 @@ PlasmoidItem {
     }
 
     ListModel { id: modeleProfils }
+    ListModel { id: modeleCasques }
 
     function rafraichir() {
         shell.lancer("--data", function (sortie) {
@@ -60,6 +62,30 @@ PlasmoidItem {
         });
         shell.lancer("--status", function (sortie, code) {
             root.sinkActif = (code === 0);
+        });
+        shell.lancer("--casque-data", function (sortie) {
+            modeleCasques.clear();
+            let actif = 0;
+            for (const ligne of sortie.split("\n")) {
+                if (!ligne) continue;
+                const c = ligne.split("\t");
+                if (c.length < 2) continue;
+                if (c[1] === "1") actif = modeleCasques.count;
+                modeleCasques.append({ nom: c[0] });
+            }
+            root.casqueIndex = actif;
+        });
+    }
+
+    function basculerCasque(nom) {
+        if (occupe) return;
+        // Un nom porteur de guillemets casserait la commande passee au shell.
+        if (nom.indexOf('"') >= 0 || nom.indexOf("'") >= 0) return;
+        occupe = true;
+        const cmd = (nom === "aucune") ? "--casque-aucune" : '--casque "' + nom + '"';
+        shell.lancer(cmd, function () {
+            occupe = false;
+            rafraichir();
         });
     }
 
@@ -142,12 +168,39 @@ PlasmoidItem {
 
         footer: PlasmaExtras.PlasmoidHeading {
             position: QQC.ToolBar.Footer
-            contentItem: PlasmaComponents.Label {
-                text: i18n("dB = capacity to place sounds · ms = the longer, the more distant")
-                font: Kirigami.Theme.smallFont
-                opacity: 0.7
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                PlasmaComponents.Label {
+                    text: i18n("dB = capacity to place sounds · ms = the longer, the more distant")
+                    font: Kirigami.Theme.smallFont
+                    opacity: 0.7
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+
+                // Correction de casque : couche distincte des profils ci-dessus.
+                // Elle compense la reponse du casque, elle ne place aucun son —
+                // d'ou sa place a part, hors de la liste.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PlasmaComponents.Label {
+                        text: i18n("Headphone:")
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.8
+                    }
+                    PlasmaComponents.ComboBox {
+                        Layout.fillWidth: true
+                        model: modeleCasques
+                        textRole: "nom"
+                        enabled: !root.occupe && modeleCasques.count > 1
+                        currentIndex: root.casqueIndex
+                        onActivated: (i) => root.basculerCasque(modeleCasques.get(i).nom)
+                    }
+                }
             }
         }
 

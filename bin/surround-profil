@@ -3,7 +3,9 @@
 set -euo pipefail
 
 HR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
+HP="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
 SINK="effect_input.virtual-surround-7.1-hesuvi"
+AUTOEQ="https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results"
 
 # Table de reference, mesuree par tools/analyse_hrir.py.
 #   champs : usage | lateralisation dB | reverb ms | commentaire
@@ -53,7 +55,72 @@ traduire() {
 
 [[ -d "$HR" ]] || { echo "Spatial Sound KDE n'est pas installe ($HR absent)." >&2; exit 1; }
 
-actuel() { basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo aucun)" .wav; }
+actuel()      { basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo aucun)" .wav; }
+casque_actif() { basename "$(readlink -f "$HP/hpcf.wav" 2>/dev/null || echo aucune)" .wav; }
+
+# Recharge la chaine. Seule l'instance dediee redemarre : le serveur audio
+# principal n'est pas touche, donc les autres flux ne sont pas coupes.
+# Repli sur le redemarrage complet pour les installations d'avant le service.
+recharger() {
+  if [[ -f "$HOME/.config/systemd/user/spatial-sound.service" ]]; then
+    systemctl --user restart spatial-sound.service
+    for _ in $(seq 40); do
+      pactl list sinks short 2>/dev/null | grep -q "$SINK" && break
+      sleep 0.05
+    done
+  else
+    systemctl --user restart pipewire pipewire-pulse wireplumber
+    sleep 2
+  fi
+}
+
+# Nom de casque -> chemin AutoEQ. L'index ne stocke que nom/categorie/source,
+# le chemin se reconstruisant a partir des trois.
+url_hpcf() {
+  awk -F'\t' -v n="$1" 'BEGIN{IGNORECASE=1}
+    !/^#/ && tolower($1)==tolower(n) { print $3 "/" $2 "/" $1 "/" $1 " minimum phase 48000Hz.wav"; exit }' \
+    "$HP/index.tsv"
+}
+
+chercher_casque() {
+  [[ -f "$HP/index.tsv" ]] || { echo "index absent — relance install.sh" >&2; exit 1; }
+  awk -F'\t' -v m="$1" '!/^#/ && tolower($0) ~ tolower(m) { printf "  %-52s %s (%s)\n", $1, $3, $2 }' \
+    "$HP/index.tsv"
+}
+
+installer_casque() {
+  local nom="$1" chemin dest
+  chemin="$(url_hpcf "$nom")"
+  if [[ -z "$chemin" ]]; then
+    echo "Casque introuvable : « $nom »" >&2
+    echo "Cherche le nom exact avec : surround-profil --casque-chercher <motif>" >&2
+    exit 1
+  fi
+  dest="$HP/$nom.wav"
+  if [[ ! -f "$dest" ]]; then
+    echo "Telechargement de la correction pour « $nom »..."
+    curl -fsSL --max-time 60 -o "$dest.part" \
+      "$AUTOEQ/$(printf '%s' "$chemin" | sed 's/ /%20/g')" \
+      || { rm -f "$dest.part"; echo "telechargement impossible." >&2; exit 1; }
+    mv "$dest.part" "$dest"
+  fi
+  # Le graphe lit deux canaux et travaille en 48 kHz : un fichier au mauvais
+  # format rendrait la chaine muette sans message d'erreur.
+  if command -v ffprobe >/dev/null; then
+    # Un champ a la fois : ffprobe restitue les valeurs dans l'ordre du flux et
+    # non dans celui demande, ce qui intervertit silencieusement canaux et
+    # frequence si on les interroge ensemble.
+    local ch sr
+    ch="$(ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 "$dest")"
+    sr="$(ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of csv=p=0 "$dest")"
+    [[ "$ch" == 2 && "$sr" == 48000 ]] \
+      || { rm -f "$dest"; echo "format inattendu ($ch canaux, $sr Hz) : 2 canaux / 48000 Hz requis." >&2; exit 1; }
+  fi
+  ln -sfn "$dest" "$HP/hpcf.wav"
+  recharger
+  printf 'Correction active : \033[1m%s\033[0m\n' "$nom"
+  echo "Attention : une correction ne vaut que pour le modele mesure."
+}
 
 # Sortie TSV pour l'applet Plasma : nom, usage, lat, reverb, commentaire, actif.
 donnees() {
@@ -66,9 +133,24 @@ donnees() {
   done
 }
 
+# Corrections deja telechargees, consommees par l'applet : il ne propose que ce
+# qui est installe, l'ajout d'un nouveau casque passant par --casque.
+casques_installes() {
+  local cur; cur="$(casque_actif)"
+  printf 'aucune\t%s\n' "$([[ "$cur" == aucune ]] && echo 1 || echo 0)"
+  for f in "$HP"/*.wav; do
+    [[ -e "$f" ]] || continue
+    local n; n="$(basename "$f" .wav)"
+    [[ "$n" == aucune || "$n" == hpcf ]] && continue
+    printf '%s\t%s\n' "$n" "$([[ "$n" == "$cur" ]] && echo 1 || echo 0)"
+  done
+}
+
 usage_txt() {
-  printf 'Usage : surround-profil [<profil>|-l|-a|--current|--data|--status]\n\n'
-  printf 'Actuel : \033[1m%s\033[0m\n\n' "$(actuel)"
+  printf 'Usage : surround-profil [<profil>|-l|-a|--status]\n'
+  printf '        surround-profil --casque <nom> | --casque-chercher <motif> | --casque-aucune\n\n'
+  printf 'Profil : \033[1m%s\033[0m   Correction de casque : \033[1m%s\033[0m\n\n' \
+    "$(actuel)" "$(casque_actif)"
   printf '  %-13s %-7s %6s %8s  %s\n' profil usage lat. reverb commentaire
   for k in "${ORDRE[@]}"; do
     [[ -f "$HR/$k.wav" ]] || continue
@@ -78,12 +160,23 @@ usage_txt() {
   printf '\nlat. = capacite a placer les sons dans l espace ; sous 3 dB, inexploitable.\n'
   printf '  -a  les %s profils installes\n' \
     "$(find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' | wc -l)"
+  printf '\nLa correction de casque est une couche distincte : elle compense la reponse\n'
+  printf 'de TON modele de casque, elle ne place aucun son. Elle ne vaut que pour le\n'
+  printf 'modele mesure — en appliquer une prevue pour un autre degrade le rendu.\n'
+  printf '  --casque-chercher hyperx     cherche parmi %s casques mesures\n' \
+    "$(grep -vc '^#' "$HP/index.tsv" 2>/dev/null || echo 0)"
 }
 
 case "${1-}" in
   ''|-h|--help|-l) usage_txt; exit 0 ;;
   --current)       actuel; exit 0 ;;
   --data)          donnees; exit 0 ;;
+  --casque)             installer_casque "${2:?nom de casque attendu}"; exit 0 ;;
+  --casque-aucune)      ln -sfn "$HP/aucune.wav" "$HP/hpcf.wav"; recharger
+                        echo "Correction desactivee."; exit 0 ;;
+  --casque-actuel)      casque_actif; exit 0 ;;
+  --casque-chercher)    chercher_casque "${2:?motif attendu}"; exit 0 ;;
+  --casque-data)        casques_installes; exit 0 ;;
   --status)        pactl list sinks short 2>/dev/null | grep -q "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
   -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
@@ -102,20 +195,7 @@ fi
 
 ln -sfn "$HR/$NEW.wav" "$HR/hrir.wav"
 
-# Seule l'instance dediee redemarre : le serveur audio principal n'est pas
-# touche, donc les autres flux (musique, chat, navigateur) ne sont pas coupes.
-# Repli sur le redemarrage complet pour les installations d'avant le service.
-if systemctl --user list-unit-files spatial-sound.service >/dev/null 2>&1 \
-   && [[ -f "$HOME/.config/systemd/user/spatial-sound.service" ]]; then
-  systemctl --user restart spatial-sound.service
-  for _ in $(seq 40); do
-    pactl list sinks short 2>/dev/null | grep -q "$SINK" && break
-    sleep 0.05
-  done
-else
-  systemctl --user restart pipewire pipewire-pulse wireplumber
-  sleep 2
-fi
+recharger
 if [[ -n "${INFO[$NEW]+x}" ]]; then
   IFS='|' read -r us lat rev note <<<"${INFO[$NEW]}"
   printf 'Profil actif : \033[1m%s\033[0m (%s, lat. +%sdB, reverb %sms — %s)\n' \
