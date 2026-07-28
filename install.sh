@@ -560,8 +560,17 @@ for c in "${CONFS_ANCIENS[@]}"; do
 done
 if (( ANCIEN_TROUVE )); then
   jaune "  ancienne configuration retiree"
+  # WirePlumber reevalue ses regles de routage au redemarrage. Il restaure
+  # normalement l'entree choisie par l'utilisateur, mais rien ne le garantit
+  # sur toutes les configurations — et une entree changee en silence se
+  # remarque au pire moment. On la remet donc explicitement.
+  SOURCE_AVANT="$(pactl get-default-source 2>/dev/null || true)"
   systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
   sleep 2
+  if [[ -n "$SOURCE_AVANT" && "$SOURCE_AVANT" != "$(pactl get-default-source 2>/dev/null)" ]]; then
+    pactl set-default-source "$SOURCE_AVANT" 2>/dev/null \
+      && jaune "  entree par defaut restauree : $SOURCE_AVANT"
+  fi
 fi
 systemctl --user enable --now spatial-sound.service 2>/dev/null \
   || jaune "  systemctl a echoue — deconnecte/reconnecte ta session."

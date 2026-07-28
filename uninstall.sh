@@ -62,8 +62,15 @@ else
   echo "Pour tout effacer : ./uninstall.sh --tout"
 fi
 
+# Meme precaution qu'a l'installation : le redemarrage de WirePlumber ne doit
+# pas changer l'entree par defaut dans le dos de l'utilisateur.
+SOURCE_AVANT="$(pactl get-default-source 2>/dev/null || true)"
 systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
 sleep 2
+if [[ -n "$SOURCE_AVANT" && "$SOURCE_AVANT" != "$(pactl get-default-source 2>/dev/null)" ]]; then
+  pactl set-default-source "$SOURCE_AVANT" 2>/dev/null \
+    && echo "Entree par defaut restauree : $SOURCE_AVANT"
+fi
 if pactl list sinks short 2>/dev/null | grep -q "effect_input.virtual-surround"; then
   echo "Le sink virtuel est encore la — deconnecte/reconnecte ta session."
 else
