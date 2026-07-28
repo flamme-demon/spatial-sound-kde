@@ -554,7 +554,7 @@ if [[ -d "$PROJET/plasmoid" ]] && (( PLASMA_OK == 1 )); then
     && "$PROJET/plasmoid/build-translations.sh" >/dev/null 2>&1 || true
   rm -rf "$PLASMOID_DIR"
   mkdir -p "$PLASMOID_DIR"
-  cp -r "$PROJET/plasmoid/." "$PLASMOID_DIR"/
+  cp -rp "$PROJET/plasmoid/." "$PLASMOID_DIR"/
   rm -rf "$PLASMOID_DIR/po" "$PLASMOID_DIR/build-translations.sh"
 
   # L'icone doit vivre dans un theme, pas seulement dans le paquet : le
@@ -575,9 +575,25 @@ if [[ -d "$PROJET/plasmoid" ]] && (( PLASMA_OK == 1 )); then
   # et les icones deja charges. Sans rechargement, une mise a jour de l'applet
   # reste invisible — y compris une icone corrigee, qui continue d'afficher « ? ».
   if pgrep -x plasmashell >/dev/null 2>&1; then
-    DEPUIS="$(ps -o lstart= -C plasmashell 2>/dev/null | head -1 | xargs)"
-    jaune "  plasmashell tourne depuis $DEPUIS"
-    jaune "  Il faut le recharger pour voir cette version."
+    # Comparaison par age en secondes plutot que par date : « ps -o lstart »
+    # est localise, et « date -d » refuse de le relire dans certaines langues.
+    PID_PS="$(pgrep -x plasmashell | head -1)"
+    AGE_PS="$(ps -o etimes= -p "$PID_PS" 2>/dev/null | tr -d ' ')"
+    DEMARRE_PS=$(( $(date +%s) - ${AGE_PS:-0} ))
+    DATE_QML="$(stat -c %Y "$PLASMOID_DIR/contents/ui/main.qml" 2>/dev/null || echo 0)"
+    if (( DEMARRE_PS > DATE_QML )); then
+      vert "  plasmashell a deja cette version en memoire"
+      PLASMA_A_JOUR=1
+    else
+      PLASMA_A_JOUR=0
+      jaune "  plasmashell tourne depuis $(( AGE_PS / 60 )) min, avec une version anterieure."
+      jaune "  Il faut le recharger pour voir celle-ci."
+    fi
+  else
+    PLASMA_A_JOUR=1
+  fi
+
+  if [[ "${PLASMA_A_JOUR:-1}" -eq 0 ]]; then
     if [[ $ASSUME_YES -eq 1 ]]; then
       jaune "  Mode non interactif : rechargement non effectue. Lance a la main :"
       echo  "      kquitapp6 plasmashell && kstart plasmashell"
