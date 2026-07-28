@@ -37,12 +37,11 @@ declare -A INFO=(
   [ssc_hù]="film|12|105|Spatial Sound Card, Shanghai"
   [gsx]="film|6|77|Sennheiser GSX, coloured"
   [dh+]="film|3|109|Dolby Headphone, distant"
-  [dvs]="eviter|2|21|does not lateralise"
 )
 # Spatial Sound Card propose six lieux : Paris, Dubai, Shanghai, Sydney,
 # Reykjavik et New York. HeSuVi n'en a capture que quatre. « hù » est
 # l'abreviation chinoise de Shanghai (沪), d'ou le nom de fichier.
-ORDRE=(cmss_game sonic EAC_Default dtshx atmos ssc_ny ssc_hù ssc_syd ssc_dub gsx dh+ dvs)
+ORDRE=(cmss_game sonic EAC_Default dtshx atmos ssc_ny ssc_hù ssc_syd ssc_dub gsx dh+)
 
 # Traduction de l'affichage terminal. --data reste en anglais : c'est une interface
 # machine, consommee par l'applet qui applique son propre catalogue.
@@ -72,6 +71,16 @@ BASE_F="$HR/.base"
 ENV_F="$HR/.enveloppe"
 DERIVE="$HR/.derive.wav"
 GEN="$(command -v spatial-sound-gen 2>/dev/null || echo "$HOME/.local/bin/spatial-sound-gen")"
+
+# printf compte les octets, pas les caracteres : « ssc_hù » occupe 7 octets pour
+# 6 signes, ce qui decalait sa ligne. On complete donc a la main, en mesurant la
+# largeur reelle.
+pad() {
+  local t="$1" l="$2" n
+  n=$(printf '%s' "$t" | wc -m)
+  printf '%s' "$t"
+  while (( n < l )); do printf ' '; ((n++)); done
+}
 
 actuel() {
   if [[ -f "$BASE_F" ]]; then cat "$BASE_F"
@@ -230,7 +239,7 @@ usage_txt() {
   for k in "${ORDRE[@]}"; do
     [[ -f "$HR/$k.wav" ]] || continue
     IFS='|' read -r us lat rev note <<<"${INFO[$k]}"
-    printf '  %-13s %-7s %5sdB %6sms  %s\n' "$k" "$us" "+$lat" "$rev" "$(traduire "$note")"
+    printf '  %s %-7s %5sdB %6sms  %s\n' "$(pad "$k" 13)" "$us" "+$lat" "$rev" "$(traduire "$note")"
   done
   printf '\nlat. = capacite a placer les sons dans l espace ; sous 3 dB, inexploitable.\n'
   printf '  -a  les %s profils installes\n' \
@@ -282,7 +291,13 @@ fi
 # valeurs hors bornes fait produire au convolueur des echantillons aberrants : le
 # resultat est une salve tres forte dans le casque, sans le moindre message
 # d'erreur. Verifier le nombre de canaux ne protege pas de cela.
-if python3 -c "import numpy, scipy.io" 2>/dev/null; then
+#
+# Reserve aux profils que nous n'avons pas livres : charger numpy et scipy coute
+# environ un demi-seconde, ce qui ralentissait chaque bascule alors que les
+# fichiers HeSuVi sont connus et sains. On valide ce qu'on ne maitrise pas.
+CONNU=0
+[[ -f "$HR/.hesuvi" ]] && grep -qxF "$NEW" "$HR/.hesuvi" && CONNU=1
+if (( ! CONNU )) && python3 -c "import numpy, scipy.io" 2>/dev/null; then
   VERDICT="$(python3 - "$HR/$NEW.wav" <<'CONTROLE'
 import sys, warnings
 warnings.filterwarnings("ignore")

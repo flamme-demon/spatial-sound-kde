@@ -99,8 +99,8 @@ kquitapp6 plasmashell && kstart plasmashell
 
 ```bash
 surround-profil              # liste, avec les mesures
-surround-profil cmss_game    # bascule (~0,15 s, sans couper les autres sons)
-surround-profil -a           # les 59 profils disponibles
+surround-profil cmss_game    # bascule (~0,1 s, sans couper les autres sons)
+surround-profil -a           # tous les profils presents
 surround-profil --data       # sortie TSV, utilisée par l'applet
 ```
 
@@ -115,7 +115,6 @@ contenu**. `tools/analyse_hrir.py` les mesure :
 | `atmos` | 46 ms | +12 dB | cinéma, ample |
 | `ssc_ny` / `ssc_hù` / `ssc_syd` | 42 / 105 / 99 ms | +9 / +12 / +14 dB | salles de Spatial Sound Card |
 | `dh+` | 109 ms | +3 dB | très réverbérant malgré sa réputation FPS |
-| `dvs` | 21 ms | **+2 dB** | à éviter — ne latéralise pas |
 
 **Latéralisation** = écart d'énergie entre l'oreille du côté de la source et l'autre,
 sur les canaux arrière. C'est le critère décisif : sous ~3 dB le profil ne place plus
@@ -125,10 +124,10 @@ rien dans l'espace, quelle que soit sa neutralité tonale par ailleurs.
 est longue, plus le son paraît lointain — agréable au cinéma, pénalisant en jeu.
 
 Le script mesure aussi la **coloration** (écart crête-à-crête entre 200 Hz et 8 kHz).
-Attention à ne pas la lire comme un critère de qualité : `dvs` affiche la coloration
-la plus faible du lot (0,7 dB) précisément parce qu'il ne filtre presque rien — donc
-ne latéralise pas. Une réponse trop plate est un signal d'alarme, pas un gage de
-neutralité.
+Attention à ne pas la lire comme un critère de qualité. Le profil `dvs`, écarté des
+recommandations, affichait la coloration la plus faible de tout le lot — 0,7 dB —
+précisément parce qu'il ne filtre presque rien, et il ne latéralise qu'à 2 dB. **Une
+réponse trop plate est un signal d'alarme, pas un gage de neutralité.**
 
 ## Réglage de réverbération
 
@@ -176,6 +175,13 @@ C'est la voie pour des paramètres de salle, que ce projet n'expose pas lui-mêm
 Linux) synthétise des réponses de salle à partir de paramètres — espace acoustique,
 gain du son direct, jeu HRTF, cible de salle, coupure des basses — et **exporte
 directement au format HeSuVi 14 canaux**. Le fichier produit se dépose tel quel.
+
+Un profil que tu ajoutes toi-même est **contrôlé avant d'être appliqué** : valeurs non
+finies, crête hors de toute plage plausible. Un fichier corrompu convolué produit des
+salves très fortes dans le casque, sans le moindre message de PipeWire — vérifier le
+nombre de canaux n'en protège pas. Le contrôle ne porte que sur les fichiers ajoutés :
+les profils livrés sont connus, et charger l'outillage de mesure coûterait un demi-
+seconde à chaque bascule.
 
 Mesure-le avant de l'adopter : `python3 tools/analyse_hrir.py`. Le critère qui compte
 reste la latéralisation, et une salle synthétisée n'y échappe pas.
@@ -269,7 +275,7 @@ dans une instance dédiée lancée par `spatial-sound.service` — c'est l'usage
 fichier `filter-chain.conf` livré avec PipeWire.
 
 Conséquence directe : changer de profil ne recharge que cette petite instance.
-Mesuré à **0,15 s**, contre ~3 s pour un redémarrage complet de la pile audio, et
+Mesuré à **0,1 s**, contre ~3 s pour un redémarrage complet de la pile audio, et
 surtout **sans interrompre les autres flux** : musique, chat et navigateur continuent
 de jouer. C'est la raison pour laquelle la configuration vit dans
 `filter-chain.conf.d/` et non dans `pipewire.conf.d/`.
@@ -284,7 +290,7 @@ fonctionnait, mais restait invisible de `wpctl` et de l'applet de volume du pann
 alors que la configuration système l'affichait. Un sink du démon, lui, est enregistré.
 
 La façade est statique : seule la chaîne derrière elle est rechargée quand tu changes
-de profil, donc les 0,15 s sont préservées.
+de profil, donc les 0,1 s sont préservées.
 
 **Conséquence à connaître** : la sortie de la chaîne doit être ancrée explicitement sur
 le périphérique physique. Sans cela, WirePlumber la route vers le périphérique par

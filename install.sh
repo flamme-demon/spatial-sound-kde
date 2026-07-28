@@ -83,7 +83,7 @@ Usage : ./install.sh [options]
 
 Profils recommandes en jeu     : cmss_game, sonic, dtshx
 Profils de salle pour le cinema : atmos, ssc_ny, ssc_syd
-A eviter : dvs (ne lateralise pas), dh+ et gsx (tres reverberants).
+A eviter : dh+ et gsx, tres reverberants.
 EOF
 }
 

@@ -99,8 +99,8 @@ kquitapp6 plasmashell && kstart plasmashell
 
 ```bash
 surround-profil              # list, with measurements
-surround-profil cmss_game    # switch (~0.15 s, without cutting other audio)
-surround-profil -a           # all 59 available profiles
+surround-profil cmss_game    # switch (~0.1 s, without cutting other audio)
+surround-profil -a           # every profile present
 surround-profil --data       # TSV output, consumed by the applet
 ```
 
@@ -115,7 +115,6 @@ Profiles are not equivalent, and **their reputation does not match their content
 | `atmos` | 46 ms | +12 dB | cinema, spacious |
 | `ssc_ny` / `ssc_hù` / `ssc_syd` | 42 / 105 / 99 ms | +9 / +12 / +14 dB | Spatial Sound Card rooms |
 | `dh+` | 109 ms | +3 dB | very reverberant despite its FPS reputation |
-| `dvs` | 21 ms | **+2 dB** | avoid — does not lateralise |
 
 **Lateralisation** = energy difference between the ear on the source's side and the
 other one, on the rear channels. This is the decisive criterion: below ~3 dB the
@@ -125,10 +124,10 @@ profile no longer places anything in space, however tonally neutral it may be.
 distant the sound feels — pleasant for film, penalising in games.
 
 The script also measures **colouration** (peak-to-peak deviation between 200 Hz and
-8 kHz). Do not read it as a quality criterion: `dvs` shows the flattest response of
-the whole set (0.7 dB) precisely because it filters almost nothing — and therefore
-does not lateralise. An overly flat response is a warning sign, not a guarantee of
-neutrality.
+8 kHz). Do not read it as a quality criterion. The `dvs` profile, dropped from the
+recommendations, showed the flattest response of the whole set — 0.7 dB — precisely
+because it filters almost nothing, and it lateralises by only 2 dB. **An overly flat
+response is a warning sign, not a guarantee of neutrality.**
 
 ## Reverberation control
 
@@ -175,6 +174,12 @@ That is the route to room parameters, which this project does not expose itself.
 Linux) synthesises room responses from parameters — acoustic space, direct sound gain,
 HRTF dataset, room target, bass crossover — and **exports straight to the 14-channel
 HeSuVi format**. The resulting file drops in as is.
+
+A profile you add yourself is **checked before being applied**: non-finite values, peak
+outside any plausible range. A corrupt file, once convolved, produces very loud bursts
+in the headphones with no message from PipeWire — checking the channel count does not
+protect against that. Only added files are checked: shipped profiles are known-good,
+and loading the measurement stack would cost half a second on every switch.
 
 Measure it before adopting it: `python3 tools/analyse_hrir.py`. Lateralisation remains
 the criterion that matters, and a synthesised room is no exception.
@@ -268,7 +273,7 @@ dedicated instance started by `spatial-sound.service` — which is the intended 
 the `filter-chain.conf` file shipped with PipeWire.
 
 The direct consequence: switching profile only reloads that small instance. Measured
-at **0.15 s**, against ~3 s for a full restart of the audio stack, and above all
+at **0.1 s**, against ~3 s for a full restart of the audio stack, and above all
 **without interrupting other streams** — music, chat and browser keep playing. That
 is why the configuration lives in `filter-chain.conf.d/` rather than
 `pipewire.conf.d/`.
@@ -282,7 +287,7 @@ The detour is not gratuitous: a node created by a client — which our sink was 
 sink is registered.
 
 The front end is static: only the chain behind it reloads when you switch profiles, so
-the 0.15 s is preserved.
+the 0.1 s is preserved.
 
 **Consequence worth knowing**: the chain's output must be explicitly anchored to the
 physical device. Without it, WirePlumber routes it to the default sink — which is now
