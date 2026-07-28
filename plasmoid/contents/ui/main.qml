@@ -197,7 +197,11 @@ PlasmoidItem {
     fullRepresentation: PlasmaExtras.Representation {
         Layout.minimumWidth: Kirigami.Units.gridUnit * 22
         Layout.minimumHeight: Kirigami.Units.gridUnit * 14
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 30
+        // Trois lignes de pied se sont ajoutees depuis (legende, casque,
+        // amortissement) : la hauteur demandee ne suffisait plus et le popup se
+        // retrouvait plafonne par cette valeur, pas par l'ecran. Plasma reduit
+        // de lui-meme si la place manque.
+        Layout.preferredHeight: Kirigami.Units.gridUnit * 38
 
         header: PlasmaExtras.PlasmoidHeading {
             RowLayout {
