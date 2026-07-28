@@ -258,6 +258,22 @@ vert "  index : $(grep -vc '^#' "$HPCF_DIR/index.tsv") casques mesures (AutoEQ)"
 titre "Configuration du sink virtuel"
 mkdir -p "$CONF_DIR"
 
+# Memorise la sortie physique d'origine pour la cibler dans la config et
+# pour que uninstall.sh la restaure exactement.
+ANCIEN_SINK="$(pactl get-default-sink 2>/dev/null || true)"
+if [[ -n "$ANCIEN_SINK" && "$ANCIEN_SINK" != *virtual-surround* ]]; then
+  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
+  vert "  sortie physique precedente : $ANCIEN_SINK"
+else
+  # En reinstallation, le sink par defaut est deja le virtuel.
+  # On lit le peripherique physique depuis l'etat sauvegarde.
+  ANCIEN_SINK=""
+  [[ -f "$ETAT" ]] && ANCIEN_SINK="$(sed -n 's/^sink_precedent=//p' "$ETAT")"
+  if [[ -n "$ANCIEN_SINK" ]]; then
+    vert "  sortie physique precedente (depuis etat) : $ANCIEN_SINK"
+  fi
+fi
+
 # Graphe genere ici plutot que copie depuis /usr/share : le fichier d'exemple
 # n'existe pas sur toutes les distros, et son chemin HRIR relatif ne se resout pas.
 {
@@ -308,7 +324,12 @@ CANAUX
   printf '                    { type = builtin label = convolver name = convLFE_L config = { filename = "%s" channel =  6 } }\n' "$HRIR_DIR/hrir.wav"
   printf '                    { type = builtin label = convolver name = convLFE_R config = { filename = "%s" channel = 13 } }\n' "$HRIR_DIR/hrir.wav"
 
-  cat <<'PIED'
+  # Ligne d'ancrage optionnelle : si on a un peripherique physique de reference,
+  # on empeche WirePlumber de router la sortie ailleurs (ex. USB > interne).
+  ANCRE=""
+  [[ -n "$ANCIEN_SINK" ]] && ANCRE=$'\n                target.object  = "'"$ANCIEN_SINK"'"'
+
+  cat <<PIED
                     { type = builtin label = mixer name = mixL }
                     { type = builtin label = mixer name = mixR }
 PIED
@@ -373,7 +394,7 @@ PIED
                 node.name      = "effect_output.virtual-surround-7.1-hesuvi"
                 node.passive   = true
                 audio.channels = 2
-                audio.position = [ FL FR ]
+                audio.position = [ FL FR ]${ANCRE:+$ANCRE}
             }
         }
     }
@@ -498,12 +519,6 @@ fi
 
 # --------------------------------------------------------------- redemarrage
 titre "Demarrage de la chaine"
-# Memorise la sortie d'origine pour que uninstall.sh la restaure exactement :
-# deviner « la premiere sortie ALSA » renvoie souvent le HDMI plutot que le casque.
-ANCIEN_SINK="$(pactl get-default-sink 2>/dev/null || true)"
-if [[ -n "$ANCIEN_SINK" && "$ANCIEN_SINK" != *virtual-surround* ]]; then
-  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
-fi
 # Une installation d'avant la 1.2 laisse la chaine dans le serveur principal :
 # il faut le redemarrer une fois pour que l'ancien sink disparaisse.
 if [[ -f "$UNITE_ANCIENNE" ]]; then
@@ -553,7 +568,14 @@ fi
 if [[ "${LIENS:-0}" -eq -1 ]]; then
   jaune "  pw-link absent : liens non verifies"
 elif [[ "${LIENS:-0}" -ge 2 ]]; then
-  vert "  sortie reliee au peripherique physique ($LIENS liens)"
+  # Verifie que la sortie est connectee au bon peripherique
+  CIBLE="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' | grep '|->' | head -1 | sed 's/.*|-> //; s/:.*//')"
+  if [[ -n "$ANCIEN_SINK" && -n "$CIBLE" && "$CIBLE" != "$ANCIEN_SINK" ]]; then
+    jaune "  sortie connectee a $CIBLE au lieu de $ANCIEN_SINK"
+    jaune "  Reinstalle ou corrige a la main : pw-link ..."
+  else
+    vert "  sortie reliee a $CIBLE ($LIENS liens)"
+  fi
 else
   jaune "  sortie non encore reliee — normal si aucun son ne joue."
   jaune "  Elle se connectera au premier flux audio."
