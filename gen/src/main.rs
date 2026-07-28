@@ -8,6 +8,7 @@
 //! reprendre de code existant.
 
 mod hesuvi;
+mod lecture;
 mod salle;
 mod sofa;
 
@@ -15,9 +16,57 @@ use salle::Salle;
 
 const FREQUENCE: u32 = 48_000;
 
+/// Raccourcit la queue de reverberation d'un profil existant, sans toucher au
+/// fichier d'origine.
+///
+/// On ne peut que RACCOURCIR : allonger demanderait de fabriquer de la
+/// reverberation absente du materiau, ce qui est le travail du mode synthese.
+///
+/// La decroissance supplementaire demarre a la crete du son direct, reperee
+/// canal par canal : l'appliquer depuis l'echantillon zero attenuerait aussi
+/// le son direct, donc le niveau general, sans rien changer au rapport
+/// direct/reverbere qui est justement ce qu'on veut regler.
+fn appliquer_enveloppe(source: &str, sortie: &str, tau_ms: f32) -> Result<(), String> {
+    let w = lecture::lire(source)?;
+    let fe = w.frequence as f32;
+    let tau = (tau_ms / 1000.0).max(0.001);
+
+    let canaux: Vec<Vec<f32>> = w
+        .canaux
+        .iter()
+        .map(|c| {
+            let crete = c
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap())
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            c.iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    if i <= crete {
+                        *v
+                    } else {
+                        *v * (-((i - crete) as f32) / fe / tau).exp()
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    // Pas de renormalisation : le son direct doit garder son niveau, seule la
+    // queue est raccourcie.
+    hesuvi::ecrire(sortie, &canaux, w.frequence, false).map_err(|e| format!("ecriture : {e}"))
+}
+
 fn aide() {
     eprintln!(
         r#"Usage : spatial-sound-gen --sofa <fichier.sofa> --sortie <fichier.wav> [options]
+        spatial-sound-gen --source <profil.wav> --enveloppe <ms> --sortie <f.wav>
+
+Mode enveloppe : raccourcit la queue d'un profil existant sans le modifier.
+  --source <f>        profil HeSuVi 14 canaux a retravailler
+  --enveloppe <ms>    constante de decroissance ; plus c'est petit, plus c'est sec
 
   --sofa <f>          jeu HRTF au format SOFA (obligatoire)
   --sortie <f>        WAV HeSuVi 14 canaux a produire (obligatoire)
@@ -54,6 +103,8 @@ fn main() {
     }
 
     let mut chemin_sofa = String::new();
+    let mut source = String::new();
+    let mut enveloppe = 0.0f32;
     let mut sortie = String::new();
     let mut s = Salle::default();
     let mut duree = 0.35f32;
@@ -86,6 +137,8 @@ fn main() {
         };
         match args[i].as_str() {
             "--sofa" => chemin_sofa = val(i),
+            "--source" => source = val(i),
+            "--enveloppe" => enveloppe = nombre(i),
             "--sortie" => sortie = val(i),
             "--largeur" => s.largeur = nombre(i),
             "--profondeur" => s.profondeur = nombre(i),
@@ -104,6 +157,24 @@ fn main() {
             }
         }
         i += 2;
+    }
+
+    // Mode enveloppe : independant de la synthese, il ne demande pas de SOFA.
+    if !source.is_empty() {
+        if sortie.is_empty() || enveloppe <= 0.0 {
+            eprintln!("--source exige --sortie et --enveloppe <ms>.");
+            std::process::exit(1);
+        }
+        match appliquer_enveloppe(&source, &sortie, enveloppe) {
+            Ok(()) => {
+                eprintln!("Enveloppe {enveloppe:.0} ms appliquee : {sortie}");
+                return;
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
     }
 
     if chemin_sofa.is_empty() || sortie.is_empty() {
@@ -154,7 +225,7 @@ fn main() {
         })
         .collect();
 
-    match hesuvi::ecrire(&sortie, &canaux, FREQUENCE) {
+    match hesuvi::ecrire(&sortie, &canaux, FREQUENCE, true) {
         Ok(()) => eprintln!(
             "\nEcrit : {sortie}\n{} canaux, {:.0} ms",
             canaux.len(),

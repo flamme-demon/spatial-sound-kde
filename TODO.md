@@ -23,77 +23,18 @@ Reste ouvert :
 
 ---
 
-## Enveloppe de reverberation reglable
+## ~~Enveloppe de reverberation reglable~~ — fait en 0.3.0
 
-Spatial Sound Card expose un « ROOM ENVELOPE » : une courbe de decroissance editable,
-graduee en dB, qui laisse raccourcir ou allonger la queue de reverberation **sans
-changer de profil**.
+Curseur « Amortissement » dans l'applet, `--enveloppe 0-100` en ligne de commande.
+Raccourcit la queue du profil actif sans le modifier ni changer son niveau.
 
-Chez nous, le seul reglage equivalent est de basculer d'un profil a l'autre — passer
-de `atmos` (46 ms) a `cmss_game` (39 ms) ou `sonic` (16 ms). C'est grossier : on
-change en meme temps la lateralisation et la coloration, alors qu'on ne voulait
-toucher qu'a la distance percue.
+Reste ouvert :
 
-Implementable simplement : appliquer une fenetre de decroissance exponentielle a la
-queue du HRIR avant de le donner au convolueur, et regenerer un WAV temporaire. Un
-curseur « proximite » dans l'applet piloterait la constante de temps.
-
-A verifier : jusqu'ou raccourcir sans introduire de discontinuite audible, et si
-l'operation doit preserver l'energie totale ou non.
-
----
-
-## Parametres de salle (« ROOM PARAMETERS »)
-
-Spatial Sound Card expose des presets de salle editables. Chez nous, la salle est
-**figee dans le HRIR** : `ssc_ny`, `ssc_syd` et `atmos` embarquent chacun la leur, et
-aucun parametre n'est reglable. Changer de salle = changer de profil, donc changer en
-meme temps la lateralisation et le timbre.
-
-**Voie deja ouverte, sans une ligne de code :** [ASH Toolset](https://github.com/ShanonPearce/ASH-Toolset)
-synthetise des salles a partir de parametres et exporte **au format HeSuVi 14 canaux**,
-que notre chaine consomme deja. Verifie : un WAV externe depose dans le dossier des
-profils est liste, selectionnable et fonctionnel. C'est documente dans les README.
-
-Limite : ASH Toolset est en AGPL-3.0 et n'a pas d'interface en ligne de commande
-documentee. On peut donc s'en servir et le recommander, mais ni l'embarquer dans ce
-depot MIT, ni automatiser la generation.
-
-Restent deux voies si l'on veut des reglages **depuis l'applet**, de cout tres inegal.
-
-### 1. Mise en forme de l'enveloppe — voir la section dediee ci-dessus
-
-Bon marche, mais ne touche qu'a la duree de la queue. Ni les angles, ni la taille de
-la piece, ni les premieres reflexions.
-
-### 2. Rendu parametrique par SOFA
-
-**Verifie le 2026-07-28 :** PipeWire livre un greffon SOFA utilisable directement.
-
-    /usr/lib/spa-0.2/filter-graph/libspa-filter-graph-plugin-sofa.so  (lie a libmysofa)
-    type = <ladspa | lv2 | builtin | sofa>   dans module-filter-chain
-    label « spatializer », controles Azimuth / Elevation / Radius
-
-Chaque enceinte virtuelle deviendrait un noeud `sofa` dont on pilote la position en
-continu, au lieu d'une convolution par une capture figee. C'est ce qui permettrait de
-vraies coordonnees de salle, et meme un suivi de tete plus tard.
-
-**Le piege, et il est serieux :** les jeux SOFA publics sont des HRTF **anechoiques**.
-On y gagne une localisation precise et reglable, on y perd toute la reverberation —
-or c'est elle qui externalise le son et le rend agreable. C'est exactement pourquoi
-les profils HeSuVi, avec leur salle incluse, sonnent plus « grands » qu'une HRTF nue.
-
-Une implementation credible demande donc les deux etages : `sofa` pour le son direct,
-plus une reverberation de synthese (premieres reflexions + queue) a construire. C'est
-un second moteur de rendu a cote de l'existant, pas une option a ajouter.
-
-A verifier avant de s'engager :
-
-- [ ] Instancier un noeud `sofa` et confirmer que les controles sont pilotables a
-      chaud, sans recharger la chaine.
-- [ ] Trouver un jeu SOFA libre et convenable (MIT KEMAR, SADIE II, ARI).
-- [ ] Comparer a l'ecoute contre `cmss_game` : si la HRTF nue sonne moins bien que
-      les captures HeSuVi, la voie ne vaut d'etre poursuivie qu'avec la reverberation.
+- [ ] **On ne sait que raccourcir.** Allonger demanderait de synthetiser de la
+      reverberation, ce que fait le generateur de salles — les deux pourraient
+      etre reunis derriere un seul reglage de distance.
+- [ ] La forme de la decroissance est une exponentielle simple. Une vraie salle
+      decroit differemment selon la frequence, les aigus s'eteignant plus vite.
 
 ---
 

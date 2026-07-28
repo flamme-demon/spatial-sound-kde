@@ -55,7 +55,40 @@ traduire() {
 
 [[ -d "$HR" ]] || { echo "Spatial Sound KDE n'est pas installe ($HR absent)." >&2; exit 1; }
 
-actuel()      { basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo aucun)" .wav; }
+# Le profil de base est memorise a part : quand une enveloppe est appliquee,
+# hrir.wav pointe sur un fichier derive, pas sur le profil choisi.
+BASE_F="$HR/.base"
+ENV_F="$HR/.enveloppe"
+DERIVE="$HR/.derive.wav"
+GEN="$(command -v spatial-sound-gen 2>/dev/null || echo "$HOME/.local/bin/spatial-sound-gen")"
+
+actuel() {
+  if [[ -f "$BASE_F" ]]; then cat "$BASE_F"
+  else basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo aucun)" .wav; fi
+}
+enveloppe_actuelle() { [[ -f "$ENV_F" ]] && cat "$ENV_F" || echo 0; }
+
+# 0 laisse le profil intact ; 100 asseche au maximum. L'echelle est geometrique
+# parce que l'oreille percoit les durees de reverberation en proportion, pas en
+# ecart absolu : de 300 a 10 ms en progression constante.
+tau_pour() {
+  awk -v v="$1" 'BEGIN{ printf "%.1f", 300 * exp(log(10.0/300.0) * v/100.0) }'
+}
+
+# Reconstruit hrir.wav a partir du profil de base et de l'enveloppe courante.
+appliquer() {
+  local base env
+  base="$(actuel)"; env="$(enveloppe_actuelle)"
+  [[ -f "$HR/$base.wav" ]] || { echo "profil de base introuvable : $base" >&2; exit 1; }
+  if [[ "$env" -le 0 ]] 2>/dev/null || [[ ! -x "$GEN" ]]; then
+    ln -sfn "$HR/$base.wav" "$HR/hrir.wav"
+  else
+    "$GEN" --source "$HR/$base.wav" --enveloppe "$(tau_pour "$env")" \
+           --sortie "$DERIVE" >/dev/null 2>&1 \
+      && ln -sfn "$DERIVE" "$HR/hrir.wav" \
+      || ln -sfn "$HR/$base.wav" "$HR/hrir.wav"
+  fi
+}
 casque_actif() { basename "$(readlink -f "$HP/hpcf.wav" 2>/dev/null || echo aucune)" .wav; }
 
 # Recharge la chaine. Seule l'instance dediee redemarre : le serveur audio
@@ -209,6 +242,15 @@ case "${1-}" in
   --casque-chercher)    chercher_casque "${2:?motif attendu}"; exit 0 ;;
   --casque-data)        casques_installes; exit 0 ;;
   --casque-chercher-data) chercher_data "${2-}"; exit 0 ;;
+  --enveloppe)
+      [[ -x "$GEN" ]] || { echo "spatial-sound-gen absent : relance install.sh avec cargo installe." >&2; exit 1; }
+      v="${2:?valeur 0-100 attendue}"
+      (( v >= 0 && v <= 100 )) || { echo "valeur hors bornes (0-100)." >&2; exit 1; }
+      echo "$v" > "$ENV_F"; appliquer; recharger
+      printf 'Enveloppe : %s%%  (constante %s ms)\n' "$v" "$(tau_pour "$v")"
+      exit 0 ;;
+  --enveloppe-actuelle) enveloppe_actuelle; exit 0 ;;
+  --enveloppe-dispo)    [[ -x "$GEN" ]] && echo 1 || echo 0; exit 0 ;;
   --status)        pactl list sinks short 2>/dev/null | grep -q "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
   -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
@@ -225,8 +267,8 @@ if command -v ffprobe >/dev/null; then
   [[ "$CH" == 14 ]] || { echo "« $NEW » a $CH canaux, il en faut 14." >&2; exit 1; }
 fi
 
-ln -sfn "$HR/$NEW.wav" "$HR/hrir.wav"
-
+echo "$NEW" > "$BASE_F"
+appliquer
 recharger
 if [[ -n "${INFO[$NEW]+x}" ]]; then
   IFS='|' read -r us lat rev note <<<"${INFO[$NEW]}"

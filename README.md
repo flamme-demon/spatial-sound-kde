@@ -130,6 +130,40 @@ the whole set (0.7 dB) precisely because it filters almost nothing — and there
 does not lateralise. An overly flat response is a warning sign, not a guarantee of
 neutrality.
 
+## Reverberation control
+
+The **Damping** slider at the foot of the applet shortens the reverberation tail of
+the active profile **without changing profile**. This was the missing control: until
+now, adjusting perceived distance meant switching profiles, which also changed
+lateralisation and tone.
+
+```bash
+surround-profil --enveloppe 0     # profile untouched
+surround-profil --enveloppe 75    # noticeably drier
+surround-profil --enveloppe 100   # driest
+```
+
+Measured on `dh+`, the most reverberant of the shipped profiles:
+
+| Damping | Reverb | Lateralisation |
+|---|---|---|
+| 0 % | 109 ms | +3.4 dB |
+| 50 % | 68 ms | +3.9 dB |
+| 75 % | 44 ms | +4.2 dB |
+| 100 % | 25 ms | +4.5 dB |
+
+**Shortening the tail improves localisation**, never the reverse: reverberation is
+decorrelated but carries equal energy to both ears, so it dilutes the interaural
+difference. Same mechanism that makes dry profiles lateralise better.
+
+Level stays constant across the whole range, so listening comparisons remain honest.
+The original profile is never modified — the result goes to a derived file, and the
+setting follows you across profiles.
+
+**It can only shorten.** Lengthening would mean fabricating reverberation that is not
+in the material, which is the room generator's job. The slider only appears if
+`spatial-sound-gen` could be built.
+
 ## Custom rooms
 
 Any **14-channel HeSuVi** WAV dropped into `~/.local/share/pipewire/hrir_hesuvi/`

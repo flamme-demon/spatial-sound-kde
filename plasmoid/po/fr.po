@@ -83,6 +83,14 @@ msgstr[0] "Saisis au moins %1 caractère"
 msgstr[1] "Saisis au moins %1 caractères"
 
 #: contents/ui/main.qml
+msgid "Damping:"
+msgstr "Amortissement :"
+
+#: contents/ui/main.qml
+msgid "%1 %"
+msgstr "%1 %"
+
+#: contents/ui/main.qml
 msgid "Remove the correction"
 msgstr "Retirer la correction"
 

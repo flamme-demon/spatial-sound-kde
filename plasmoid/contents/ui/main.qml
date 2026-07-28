@@ -18,6 +18,8 @@ PlasmoidItem {
     property bool sinkActif: false
     property bool occupe: false
     property string casqueActif: "aucune"
+    property int enveloppe: 0
+    property bool enveloppeDispo: false
     property string indiceRecherche: ""
 
     // En deca de ce seuil, une recherche renverrait des centaines d'entrees sans
@@ -77,6 +79,13 @@ PlasmoidItem {
         shell.lancer("--status", function (sortie, code) {
             root.sinkActif = (code === 0);
         });
+        shell.lancer("--enveloppe-dispo", function (sortie) {
+            root.enveloppeDispo = (sortie.trim() === "1");
+        });
+        shell.lancer("--enveloppe-actuelle", function (sortie) {
+            const v = parseInt(sortie.trim());
+            if (!isNaN(v)) root.enveloppe = v;
+        });
         shell.lancer("--casque-data", function (sortie) {
             modeleCasques.clear();
             for (const ligne of sortie.split("\n")) {
@@ -120,6 +129,17 @@ PlasmoidItem {
                     nom: c[0], source: c[1], installe: c[2] === "1"
                 });
             }
+        });
+    }
+
+    // Applique a la relache seulement : chaque valeur regenere le profil et
+    // recharge la chaine, ce qui serait absurde a chaque pixel du curseur.
+    function reglerEnveloppe(v) {
+        if (occupe) return;
+        occupe = true;
+        shell.lancer("--enveloppe " + Math.round(v), function () {
+            occupe = false;
+            rafraichir();
         });
     }
 
@@ -355,6 +375,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.ToolButton {
+                        id: boutonEffacer
                         icon.name: "edit-clear"
                         enabled: !root.occupe && root.casqueActif !== "aucune"
                         display: PlasmaComponents.AbstractButton.IconOnly
@@ -362,6 +383,38 @@ PlasmoidItem {
                         PlasmaComponents.ToolTip.text: i18n("Remove the correction")
                         PlasmaComponents.ToolTip.visible: hovered
                         PlasmaComponents.ToolTip.delay: 700
+                    }
+                }
+
+                // Reglage de reverberation : raccourcit la queue du profil actif
+                // sans changer de profil. Absent si le generateur n'est pas
+                // compile — le reste fonctionne sans lui.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    visible: root.enveloppeDispo
+
+                    PlasmaComponents.Label {
+                        text: i18n("Damping:")
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.8
+                    }
+                    PlasmaComponents.Slider {
+                        id: curseurEnv
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 100
+                        stepSize: 5
+                        enabled: !root.occupe
+                        value: root.enveloppe
+                        onPressedChanged: if (!pressed) root.reglerEnveloppe(value)
+                    }
+                    PlasmaComponents.Label {
+                        text: i18n("%1 %", Math.round(curseurEnv.value))
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
+                        horizontalAlignment: Text.AlignRight
                     }
                 }
             }

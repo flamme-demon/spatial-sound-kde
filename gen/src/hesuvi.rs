@@ -40,10 +40,15 @@ pub const PLAN: [(usize, usize); 14] = [
 ];
 
 /// Ecrit un WAV PCM 16 bits entrelace.
+/// `normaliser` : viser le gain de convolution des profils de reference.
+/// A desactiver quand on retravaille un profil existant — renormaliser ferait
+/// varier le volume a chaque mouvement du reglage, ce qui rend toute comparaison
+/// a l'oreille trompeuse. Seule la garde anti-saturation reste active.
 pub fn ecrire(
     chemin: &str,
     canaux: &[Vec<f32>],
     frequence: u32,
+    normaliser: bool,
 ) -> std::io::Result<()> {
     let nb = canaux.len() as u16;
     let n = canaux.iter().map(|c| c.len()).max().unwrap_or(0);
@@ -63,7 +68,7 @@ pub fn ecrire(
         .iter()
         .map(|c| c.iter().map(|v| v * v).sum::<f32>())
         .fold(0.0f32, f32::max);
-    let mut gain = if energie_max > 0.0 {
+    let mut gain = if normaliser && energie_max > 0.0 {
         GAIN_VISE / energie_max.sqrt()
     } else {
         1.0

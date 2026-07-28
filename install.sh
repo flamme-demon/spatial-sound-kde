@@ -335,6 +335,9 @@ CANAUX
   ANCRE=""
   [[ -n "$ANCIEN_SINK" ]] && ANCRE=$'\n                target.object  = "'"$ANCIEN_SINK"'"'
 
+  # Delimiteur NON quote : $ANCRE doit s'etendre plus bas. Consequence, tout ce
+  # bloc subit l'expansion du shell — n'y introduire ni $, ni backquote, ni
+  # antislash sans les proteger.
   cat <<PIED
                     { type = builtin label = mixer name = mixL }
                     { type = builtin label = mixer name = mixR }
@@ -348,7 +351,7 @@ PIED
   printf '                    { type = builtin label = convolver name = convHP_L config = { filename = "%s" channel = 0 } }\n' "$HPCF_DIR/hpcf.wav"
   printf '                    { type = builtin label = convolver name = convHP_R config = { filename = "%s" channel = 1 } }\n' "$HPCF_DIR/hpcf.wav"
 
-  cat <<'PIED' 
+  cat <<PIED 
                 ]
                 links = [
                     { output = "copyFL:Out"  input="convFL_L:In"  }
@@ -439,6 +442,23 @@ vert "  $BIN_DIR/surround-profil"
 for t in analyse_hrir.py gen_tests.py; do
   [[ -f "$PROJET/tools/$t" ]] && install -m 755 "$PROJET/tools/$t" "$TEST_DIR/$t" && vert "  $TEST_DIR/$t"
 done
+
+# Generateur de salles : facultatif, il n'est requis que pour le reglage de
+# reverberation et la synthese. Sans cargo, le reste fonctionne a l'identique.
+if [[ -d "$PROJET/gen" ]]; then
+  if command -v cargo >/dev/null; then
+    echo "  compilation de spatial-sound-gen..."
+    if (cd "$PROJET/gen" && cargo build --release --quiet 2>/dev/null); then
+      install -m755 "$PROJET/gen/target/release/spatial-sound-gen" "$BIN_DIR/spatial-sound-gen"
+      vert "  $BIN_DIR/spatial-sound-gen"
+    else
+      jaune "  compilation echouee — reglage de reverberation indisponible"
+      jaune "  (verifie que libmysofa est installe)"
+    fi
+  else
+    jaune "  cargo absent : reglage de reverberation indisponible"
+  fi
+fi
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;

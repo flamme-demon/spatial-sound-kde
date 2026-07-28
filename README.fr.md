@@ -130,6 +130,41 @@ la plus faible du lot (0,7 dB) précisément parce qu'il ne filtre presque rien 
 ne latéralise pas. Une réponse trop plate est un signal d'alarme, pas un gage de
 neutralité.
 
+## Réglage de réverbération
+
+Le curseur **Amortissement**, au pied de l'applet, raccourcit la queue de
+réverbération du profil actif **sans en changer**. C'est le réglage qui manquait :
+jusque-là, ajuster la distance perçue obligeait à basculer de profil, donc à
+modifier en même temps la latéralisation et le timbre.
+
+```bash
+surround-profil --enveloppe 0     # profil intact
+surround-profil --enveloppe 75    # nettement plus sec
+surround-profil --enveloppe 100   # au plus sec
+```
+
+Mesuré sur `dh+`, le plus réverbérant des profils livrés :
+
+| Amortissement | Réverbération | Latéralisation |
+|---|---|---|
+| 0 % | 109 ms | +3,4 dB |
+| 50 % | 68 ms | +3,9 dB |
+| 75 % | 44 ms | +4,2 dB |
+| 100 % | 25 ms | +4,5 dB |
+
+**Raccourcir la queue améliore la localisation**, jamais l'inverse : la
+réverbération, décorrélée mais d'énergie égale aux deux oreilles, dilue l'écart
+interaural. C'est la même mécanique qui explique pourquoi les profils secs
+latéralisent mieux.
+
+Le niveau reste constant d'un bout à l'autre du curseur, pour que la comparaison à
+l'oreille reste honnête. Le profil d'origine n'est jamais modifié : le résultat est
+écrit dans un fichier dérivé, et le réglage suit d'un profil à l'autre.
+
+**On ne peut que raccourcir.** Allonger demanderait de fabriquer une réverbération
+absente du matériau — c'est le travail du générateur de salles, pas de ce réglage.
+Le curseur n'apparaît que si `spatial-sound-gen` a pu être compilé.
+
 ## Salles personnalisées
 
 N'importe quel WAV **HeSuVi 14 canaux** déposé dans
