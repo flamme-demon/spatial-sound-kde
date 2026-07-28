@@ -15,6 +15,7 @@ CONF="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/filter-chain.conf.d/99-spatial-
 CONF_ANCIEN="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/99-spatial-sound.conf"
 UNITE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/spatial-sound.service"
 BIN="$HOME/.local/bin/surround-profil"
+GEN="$HOME/.local/bin/spatial-sound-gen"
 PLASMOIDS="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids"
 
 TOUT=0
@@ -49,7 +50,7 @@ if [[ -f "$UNITE" ]]; then
   rm -fv "$UNITE"
   systemctl --user daemon-reload 2>/dev/null || true
 fi
-rm -fv "$CONF" "$CONF_ANCIEN" "$BIN" \
+rm -fv "$CONF" "$CONF_ANCIEN" "$BIN" "$GEN" \
        "${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/98-spatial-sound-sink.conf"
 rm -fv "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/org.spatialsound.kde.svg" \
        "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/org.pwsurround.spatialsound.svg" 2>/dev/null
@@ -65,6 +66,11 @@ done
 if [[ $TOUT -eq 1 ]]; then
   rm -rfv "$HRIR_DIR" "$TEST_DIR" "$HPCF_DIR" "$ETAT"
 else
+  # Etat de fonctionnement : profil de base, reglage de reverberation et fichier
+  # derive. Sans ce nettoyage, une reinstallation reprendrait un reglage que
+  # l'utilisateur croit avoir efface, et le derive resterait orphelin.
+  rm -f "$HRIR_DIR/.base" "$HRIR_DIR/.enveloppe" "$HRIR_DIR/.derive.wav" \
+        "$HRIR_DIR/.hesuvi" "$HRIR_DIR/hrir.wav" "$HPCF_DIR/hpcf.wav" 2>/dev/null
   echo "HRIR, corrections de casque et fichiers de test conserves."
   echo "Pour tout effacer : ./uninstall.sh --tout"
 fi

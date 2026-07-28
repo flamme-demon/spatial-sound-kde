@@ -210,7 +210,7 @@ réserve que le filtre garde pour ses remontées, pas une perte de qualité.
 ```bash
 cd ~/.local/share/pipewire/tests-surround
 python3 gen_tests.py
-paplay -d effect_input.virtual-surround-7.1-hesuvi test_cercle.wav
+paplay -d spatial-sound-sink test_cercle.wav
 ```
 
 - `test_avant_arriere.wav` — trajectoire continue avant → côtés → arrière → retour
@@ -243,12 +243,14 @@ localisant quasiment pas.
 ## Fichiers installés
 
 ```
+~/.config/pipewire/pipewire.conf.d/98-spatial-sound-sink.conf         périphérique visible
 ~/.config/pipewire/filter-chain.conf.d/99-spatial-sound.conf          graphe de convolution
 ~/.config/systemd/user/spatial-sound.service                         instance dédiée
 ~/.local/share/pipewire/hrir_hesuvi/                                 profils HRIR
 ~/.local/share/pipewire/hpcf/                                        corrections de casque + index
 ~/.local/share/pipewire/tests-surround/                              outils de mesure/test
 ~/.local/bin/surround-profil                                         sélecteur de profil
+~/.local/bin/spatial-sound-gen                                       générateur de salles
 ~/.local/share/plasma/plasmoids/org.spatialsound.kde/                applet Plasma (KDE)
 ~/.local/share/icons/hicolor/scalable/apps/org.spatialsound.kde.svg  icône
 ```

@@ -209,7 +209,7 @@ the filter reserves for its boosts, not a loss of quality.
 ```bash
 cd ~/.local/share/pipewire/tests-surround
 python3 gen_tests.py
-paplay -d effect_input.virtual-surround-7.1-hesuvi test_cercle.wav
+paplay -d spatial-sound-sink test_cercle.wav
 ```
 
 - `test_avant_arriere.wav` — continuous path front → sides → rear → back again
@@ -242,12 +242,14 @@ pink-noise bursts, because a steady sine tone barely localises at all.
 ## Installed files
 
 ```
+~/.config/pipewire/pipewire.conf.d/98-spatial-sound-sink.conf         visible device
 ~/.config/pipewire/filter-chain.conf.d/99-spatial-sound.conf          convolution graph
 ~/.config/systemd/user/spatial-sound.service                          dedicated instance
 ~/.local/share/pipewire/hrir_hesuvi/                                  HRIR profiles
 ~/.local/share/pipewire/hpcf/                                          headphone corrections + index
 ~/.local/share/pipewire/tests-surround/                               measurement/test tools
 ~/.local/bin/surround-profil                                          profile selector
+~/.local/bin/spatial-sound-gen                                        room generator
 ~/.local/share/plasma/plasmoids/org.spatialsound.kde/                 Plasma applet (KDE)
 ~/.local/share/icons/hicolor/scalable/apps/org.spatialsound.kde.svg   icon
 ```
