@@ -273,6 +273,9 @@ case "${1-}" in
   --enveloppe-dispo)    [[ -x "$GEN" ]] && echo 1 || echo 0; exit 0 ;;
   --status)        contient "$(pactl list sinks short 2>/dev/null || true)" "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
+  --sync)          # État compact pour le polling de l'applet : profil<TAB>enveloppe<TAB>casque
+                    printf '%s\t%s\t%s\n' "$(actuel)" "$(enveloppe_actuelle)" "$(casque_actif)"
+                    exit 0 ;;
   -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
         | sed 's/\.wav$//' | sort | column; exit 0 ;;
 esac
