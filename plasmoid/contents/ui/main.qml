@@ -96,6 +96,11 @@ PlasmoidItem {
                 modeleCasques.append({ nom: c[0] });
             }
         });
+        // Met à jour l'état de référence pour le polling : évite un
+        // rafraîchissement redondant au cycle suivant.
+        shell.lancer("--sync", function (sortie) {
+            root.dernierEtat = sortie;
+        });
     }
 
     // Champ vide : on montre ce qui est deja telecharge. Des qu'on tape, on
@@ -168,9 +173,22 @@ PlasmoidItem {
 
     Component.onCompleted: rafraichir()
 
+    // Polling rapide (500 ms) : --sync renvoie une chaîne compacte
+    // (profil<TAB>enveloppe<TAB>casque) qu'on compare à l'état précédent.
+    // On ne rafraîchit le modèle complet que si quelque chose a changé.
+    property string dernierEtat: ""
+
     Timer {
-        interval: 30000; running: true; repeat: true
-        onTriggered: if (!root.occupe) root.rafraichir()
+        interval: 500; running: true; repeat: true
+        onTriggered: {
+            if (root.occupe) return
+            shell.lancer("--sync", function (sortie) {
+                if (sortie !== root.dernierEtat) {
+                    root.dernierEtat = sortie
+                    root.rafraichir()
+                }
+            })
+        }
     }
 
     // Icone deposee par install.sh dans le theme hicolor de l'utilisateur.
