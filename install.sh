@@ -188,7 +188,8 @@ fi
 title "Jeux de reponses impulsionnelles (HRIR)"
 mkdir -p "$HRIR_DIR"
 
-count_wav() { find "$HRIR_DIR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' 2>/dev/null | wc -l; }
+# Les fichiers caches (.derived.wav, profil retravaille) ne sont pas des profils.
+count_wav() { find "$HRIR_DIR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' ! -name '.*' 2>/dev/null | wc -l; }
 
 if [[ -n "$HRIR_LOCAL" ]]; then
   [[ -d "$HRIR_LOCAL" ]] || die "dossier introuvable : $HRIR_LOCAL"

@@ -265,7 +265,7 @@ usage_txt() {
   done
   printf '\nlat. = capacite a placer les sons dans l espace ; sous 3 dB, inexploitable.\n'
   printf '  -a  les %s profils installes\n' \
-    "$(find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' | wc -l)"
+    "$(find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' ! -name '.*' | wc -l)"
   printf '\nLa correction de casque est une couche distincte : elle compense la reponse\n'
   printf 'de TON modele de casque, elle ne place aucun son. Elle ne vaut que pour le\n'
   printf 'modele mesure — en appliquer une prevue pour un autre degrade le rendu.\n'
@@ -308,7 +308,9 @@ case "${1-}" in
   --sync)          # Etat compact pour le polling de l'applet : profil, enveloppe, casque
                    printf '%s\t%s\t%s\n' "$(current_profile)" "$(current_envelope)" "$(current_headphone)"
                    exit 0 ;;
-  -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
+  # Les fichiers caches ne sont pas des profils : .derived.wav est le profil
+  # actif retravaille par l'enveloppe, pas un choix a proposer.
+  -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' ! -name '.*' -printf '%f\n' \
         | sed 's/\.wav$//' | sort | column; exit 0 ;;
 esac
 
