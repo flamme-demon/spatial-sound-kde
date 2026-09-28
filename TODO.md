@@ -25,7 +25,7 @@ Reste ouvert :
 
 ## ~~Enveloppe de reverberation reglable~~ — fait en 0.3.0
 
-Curseur « Amortissement » dans l'applet, `--enveloppe 0-100` en ligne de commande.
+Curseur « Amortissement » dans l'applet, `--envelope 0-100` en ligne de commande.
 Raccourcit la queue du profil actif sans le modifier ni changer son niveau.
 
 Reste ouvert :

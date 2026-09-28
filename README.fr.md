@@ -69,7 +69,7 @@ Options utiles :
 
 | Option | Effet |
 |---|---|
-| `--profil <nom>` | profil initial (défaut : `cmss_game`) |
+| `--profile <nom>` | profil initial (défaut : `cmss_game`) |
 | `--hrir-dir <chemin>` | utilise des WAV HeSuVi locaux au lieu de télécharger |
 | `--no-default-sink` | n'impose pas le sink virtuel comme sortie par défaut |
 | `--no-deps` | n'installe rien via pacman |
@@ -105,6 +105,9 @@ surround-profil --data       # sortie TSV, utilisée par l'applet
 surround-profil --sync       # état compact, interrogé par l'applet toutes les 500 ms
 ```
 
+Les options renommées en 1.1 restent acceptées sous leur ancien nom français
+(`--casque`, `--enveloppe`…) : les scripts existants ne cassent pas.
+
 Les profils ne se valent pas, et **leur réputation ne correspond pas à leur
 contenu**. `tools/analyse_hrir.py` les mesure :
 
@@ -138,9 +141,9 @@ jusque-là, ajuster la distance perçue obligeait à basculer de profil, donc à
 modifier en même temps la latéralisation et le timbre.
 
 ```bash
-surround-profil --enveloppe 0     # profil intact
-surround-profil --enveloppe 75    # nettement plus sec
-surround-profil --enveloppe 100   # au plus sec
+surround-profil --envelope 0      # profil intact
+surround-profil --envelope 75     # nettement plus sec
+surround-profil --envelope 100    # au plus sec
 ```
 
 Mesuré sur `dh+`, le plus réverbérant des profils livrés :
@@ -194,9 +197,9 @@ Couche **distincte** des profils ci-dessus, et cumulable avec eux : un profil HR
 fréquence de ton modèle*. Elle ne déplace rien.
 
 ```bash
-surround-profil --casque-chercher hyperx      # cherche parmi 8850 casques mesurés
-surround-profil --casque "HyperX Cloud Flight S"
-surround-profil --casque-aucune               # revenir à aucune correction
+surround-profil --headphone-search hyperx    # cherche parmi 8850 casques mesurés
+surround-profil --headphone "HyperX Cloud Flight S"
+surround-profil --headphone-none              # revenir à aucune correction
 ```
 
 Le filtre est téléchargé à la demande depuis [AutoEQ](https://github.com/jaakkopasanen/AutoEq),
@@ -224,11 +227,11 @@ inattendu. C'est une déduction, pas une information de l'éditeur.
 ```bash
 cd ~/.local/share/pipewire/tests-surround
 python3 gen_tests.py
-paplay -d spatial-sound-sink test_cercle.wav
+paplay -d spatial-sound-sink test_circle.wav
 ```
 
-- `test_avant_arriere.wav` — trajectoire continue avant → côtés → arrière → retour
-- `test_cercle.wav` — une salve isolée par enceinte, dans le sens horaire
+- `test_front_back.wav` — trajectoire continue avant → côtés → arrière → retour
+- `test_circle.wav` — une salve isolée par enceinte, dans le sens horaire
 
 Les fichiers sont des pistes **7.1 brutes** : il faut les jouer sur le sink virtuel,
 pas en lecture directe. Ils utilisent du bruit rose en salves, un sinus ne se
@@ -251,7 +254,7 @@ localisant quasiment pas.
 
 ```bash
 ./uninstall.sh          # retire config et binaire, garde les HRIR
-./uninstall.sh --tout   # efface aussi les HRIR et les fichiers de test
+./uninstall.sh --all    # efface aussi les HRIR et les fichiers de test
 ```
 
 ## Fichiers installés

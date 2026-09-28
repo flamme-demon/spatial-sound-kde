@@ -69,7 +69,7 @@ service and verifies that the sink appears.
 
 | Option | Effect |
 |---|---|
-| `--profil <name>` | initial profile (default: `cmss_game`) |
+| `--profile <name>` | initial profile (default: `cmss_game`) |
 | `--hrir-dir <path>` | use local HeSuVi WAVs instead of downloading |
 | `--no-default-sink` | do not make the virtual sink the default output |
 | `--no-deps` | install nothing through pacman |
@@ -105,6 +105,9 @@ surround-profil --data       # TSV output, consumed by the applet
 surround-profil --sync       # compact state, polled by the applet every 500 ms
 ```
 
+Options renamed in 1.1 keep working under their former French names (`--casque`,
+`--enveloppe`…), so existing scripts do not break.
+
 Profiles are not equivalent, and **their reputation does not match their contents**.
 `tools/analyse_hrir.py` measures them:
 
@@ -138,9 +141,9 @@ now, adjusting perceived distance meant switching profiles, which also changed
 lateralisation and tone.
 
 ```bash
-surround-profil --enveloppe 0     # profile untouched
-surround-profil --enveloppe 75    # noticeably drier
-surround-profil --enveloppe 100   # driest
+surround-profil --envelope 0      # profile untouched
+surround-profil --envelope 75     # noticeably drier
+surround-profil --envelope 100    # driest
 ```
 
 Measured on `dh+`, the most reverberant of the shipped profiles:
@@ -192,9 +195,9 @@ profile *places* sounds around your head, a headphone correction *compensates yo
 model's frequency response*. It moves nothing.
 
 ```bash
-surround-profil --casque-chercher hyperx      # search among 8850 measured headphones
-surround-profil --casque "HyperX Cloud Flight S"
-surround-profil --casque-aucune               # back to no correction
+surround-profil --headphone-search hyperx    # search among 8850 measured headphones
+surround-profil --headphone "HyperX Cloud Flight S"
+surround-profil --headphone-none              # back to no correction
 ```
 
 The filter is fetched on demand from [AutoEQ](https://github.com/jaakkopasanen/AutoEq)
@@ -222,11 +225,11 @@ unexpected filename. That is a deduction, not information from the vendor.
 ```bash
 cd ~/.local/share/pipewire/tests-surround
 python3 gen_tests.py
-paplay -d spatial-sound-sink test_cercle.wav
+paplay -d spatial-sound-sink test_circle.wav
 ```
 
-- `test_avant_arriere.wav` — continuous path front → sides → rear → back again
-- `test_cercle.wav` — one isolated burst per speaker, clockwise
+- `test_front_back.wav` — continuous path front → sides → rear → back again
+- `test_circle.wav` — one isolated burst per speaker, clockwise
 
 These are **raw 7.1 tracks**: play them on the virtual sink, not directly. They use
 pink-noise bursts, because a steady sine tone barely localises at all.
@@ -249,7 +252,7 @@ pink-noise bursts, because a steady sine tone barely localises at all.
 
 ```bash
 ./uninstall.sh          # remove config and binaries, keep the HRIR
-./uninstall.sh --tout   # also erase the HRIR and test files
+./uninstall.sh --all    # also erase the HRIR and test files
 ```
 
 ## Installed files
