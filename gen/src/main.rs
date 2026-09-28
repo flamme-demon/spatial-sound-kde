@@ -8,13 +8,13 @@
 //! reprendre de code existant.
 
 mod hesuvi;
-mod lecture;
-mod salle;
+mod room;
 mod sofa;
+mod wav;
 
-use salle::Salle;
+use room::Room;
 
-const FREQUENCE: u32 = 48_000;
+const SAMPLE_RATE: u32 = 48_000;
 
 /// Raccourcit la queue de reverberation d'un profil existant, sans toucher au
 /// fichier d'origine.
@@ -26,16 +26,16 @@ const FREQUENCE: u32 = 48_000;
 /// canal par canal : l'appliquer depuis l'echantillon zero attenuerait aussi
 /// le son direct, donc le niveau general, sans rien changer au rapport
 /// direct/reverbere qui est justement ce qu'on veut regler.
-fn appliquer_enveloppe(source: &str, sortie: &str, tau_ms: f32) -> Result<(), String> {
-    let w = lecture::lire(source)?;
-    let fe = w.frequence as f32;
+fn apply_envelope(source: &str, output: &str, tau_ms: f32) -> Result<(), String> {
+    let w = wav::read(source)?;
+    let fs = w.sample_rate as f32;
     let tau = (tau_ms / 1000.0).max(0.001);
 
-    let canaux: Vec<Vec<f32>> = w
-        .canaux
+    let channels: Vec<Vec<f32>> = w
+        .channels
         .iter()
         .map(|c| {
-            let crete = c
+            let peak = c
                 .iter()
                 .enumerate()
                 .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap())
@@ -44,10 +44,10 @@ fn appliquer_enveloppe(source: &str, sortie: &str, tau_ms: f32) -> Result<(), St
             c.iter()
                 .enumerate()
                 .map(|(i, v)| {
-                    if i <= crete {
+                    if i <= peak {
                         *v
                     } else {
-                        *v * (-((i - crete) as f32) / fe / tau).exp()
+                        *v * (-((i - peak) as f32) / fs / tau).exp()
                     }
                 })
                 .collect()
@@ -56,39 +56,41 @@ fn appliquer_enveloppe(source: &str, sortie: &str, tau_ms: f32) -> Result<(), St
 
     // Pas de renormalisation : le son direct doit garder son niveau, seule la
     // queue est raccourcie.
-    hesuvi::ecrire(sortie, &canaux, w.frequence, false).map_err(|e| format!("ecriture : {e}"))
+    hesuvi::write(output, &channels, w.sample_rate, false).map_err(|e| format!("ecriture : {e}"))
 }
 
-fn aide() {
+fn help() {
     eprintln!(
-        r#"Usage : spatial-sound-gen --sofa <fichier.sofa> --sortie <fichier.wav> [options]
-        spatial-sound-gen --source <profil.wav> --enveloppe <ms> --sortie <f.wav>
+        r#"Usage : spatial-sound-gen --sofa <fichier.sofa> --output <fichier.wav> [options]
+        spatial-sound-gen --source <profil.wav> --envelope <ms> --output <f.wav>
 
 Mode enveloppe : raccourcit la queue d'un profil existant sans le modifier.
   --source <f>        profil HeSuVi 14 canaux a retravailler
-  --enveloppe <ms>    constante de decroissance ; plus c'est petit, plus c'est sec
+  --envelope <ms>     constante de decroissance ; plus c'est petit, plus c'est sec
 
   --sofa <f>          jeu HRTF au format SOFA (obligatoire)
-  --sortie <f>        WAV HeSuVi 14 canaux a produire (obligatoire)
-  --preset <nom>      cabine | studio | regie | salon   (defaut studio)
+  --output <f>        WAV HeSuVi 14 canaux a produire (obligatoire)
+  --preset <nom>      booth | studio | control-room | living-room   (defaut studio)
                       Les options ci-dessous priment sur le preset.
 
 Geometrie de la piece
-  --largeur <m>       defaut 4.2
-  --profondeur <m>    defaut 5.0
-  --hauteur <m>       defaut 2.6
-  --rayon <m>         distance auditeur-enceinte, defaut 1.8
+  --width <m>         defaut 4.2
+  --depth <m>         defaut 5.0
+  --height <m>        defaut 2.6
+  --radius <m>        distance auditeur-enceinte, defaut 1.8
 
 Acoustique
   --absorption <0-1>  absorption moyenne des parois, defaut 0.60
                       0.30 = piece vivante, 0.72 = fortement traitee
-  --amortissement <0-1>  perte d'aigus a chaque reflexion, defaut 0.35
-  --gain-direct <dB>  rapproche (+) ou eloigne (-) la scene, defaut 0
-  --ordre <n>         ordre des reflexions calculees, defaut 3
+  --damping <0-1>     perte d'aigus a chaque reflexion, defaut 0.35
+  --direct-gain <dB>  rapproche (+) ou eloigne (-) la scene, defaut 0
+  --order <n>         ordre des reflexions calculees, defaut 3
 
 Divers
-  --duree <s>         longueur de la reponse, defaut 0.35
-  --graine <n>        rend la queue reproductible, defaut 1
+  --duration <s>      longueur de la reponse, defaut 0.35
+  --seed <n>          rend la queue reproductible, defaut 1
+
+Les noms francais d'avant la 1.1 (--sortie, --largeur, cabine...) restent acceptes.
 
 Mesure le resultat avant de l'adopter :
   python3 tools/analyse_hrir.py"#
@@ -98,29 +100,30 @@ Mesure le resultat avant de l'adopter :
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "-h" || a == "--help") {
-        aide();
+        help();
         std::process::exit(if args.is_empty() { 1 } else { 0 });
     }
 
-    let mut chemin_sofa = String::new();
+    let mut sofa_path = String::new();
     let mut source = String::new();
-    let mut enveloppe = 0.0f32;
-    let mut sortie = String::new();
-    let mut s = Salle::default();
-    let mut duree = 0.35f32;
-    let mut graine = 1u64;
+    let mut envelope = 0.0f32;
+    let mut output = String::new();
+    let mut r = Room::default();
+    let mut duration = 0.35f32;
+    let mut seed = 1u64;
 
     // Le preset est lu d'abord : les options explicites doivent pouvoir l'ajuster.
     if let Some(k) = args.iter().position(|a| a == "--preset") {
-        match args.get(k + 1).and_then(|n| Salle::preset(n)) {
-            Some(p) => s = p,
+        match args.get(k + 1).and_then(|n| Room::preset(n)) {
+            Some(p) => r = p,
             None => {
-                eprintln!("preset inconnu : cabine | studio | regie | salon");
+                eprintln!("preset inconnu : booth | studio | control-room | living-room");
                 std::process::exit(1);
             }
         }
     }
 
+    // Chaque option garde son ancien nom francais en alias.
     let mut i = 0;
     while i < args.len() {
         let val = |i: usize| -> String {
@@ -129,30 +132,30 @@ fn main() {
                 std::process::exit(1);
             })
         };
-        let nombre = |i: usize| -> f32 {
+        let number = |i: usize| -> f32 {
             val(i).parse().unwrap_or_else(|_| {
                 eprintln!("valeur numerique attendue apres {}", args[i]);
                 std::process::exit(1);
             })
         };
         match args[i].as_str() {
-            "--sofa" => chemin_sofa = val(i),
+            "--sofa" => sofa_path = val(i),
             "--source" => source = val(i),
-            "--enveloppe" => enveloppe = nombre(i),
-            "--sortie" => sortie = val(i),
-            "--largeur" => s.largeur = nombre(i),
-            "--profondeur" => s.profondeur = nombre(i),
-            "--hauteur" => s.hauteur = nombre(i),
-            "--rayon" => s.rayon = nombre(i),
-            "--absorption" => s.absorption = nombre(i),
-            "--amortissement" => s.amortissement = nombre(i),
-            "--gain-direct" => s.gain_direct = nombre(i),
-            "--ordre" => s.ordre = nombre(i) as i32,
-            "--duree" => duree = nombre(i),
-            "--graine" => graine = nombre(i) as u64,
+            "--envelope" | "--enveloppe" => envelope = number(i),
+            "--output" | "--sortie" => output = val(i),
+            "--width" | "--largeur" => r.width = number(i),
+            "--depth" | "--profondeur" => r.depth = number(i),
+            "--height" | "--hauteur" => r.height = number(i),
+            "--radius" | "--rayon" => r.radius = number(i),
+            "--absorption" => r.absorption = number(i),
+            "--damping" | "--amortissement" => r.damping = number(i),
+            "--direct-gain" | "--gain-direct" => r.direct_gain = number(i),
+            "--order" | "--ordre" => r.order = number(i) as i32,
+            "--duration" | "--duree" => duration = number(i),
+            "--seed" | "--graine" => seed = number(i) as u64,
             "--preset" => {} // deja traite
-            autre => {
-                eprintln!("option inconnue : {autre}");
+            other => {
+                eprintln!("option inconnue : {other}");
                 std::process::exit(1);
             }
         }
@@ -161,13 +164,13 @@ fn main() {
 
     // Mode enveloppe : independant de la synthese, il ne demande pas de SOFA.
     if !source.is_empty() {
-        if sortie.is_empty() || enveloppe <= 0.0 {
-            eprintln!("--source exige --sortie et --enveloppe <ms>.");
+        if output.is_empty() || envelope <= 0.0 {
+            eprintln!("--source exige --output et --envelope <ms>.");
             std::process::exit(1);
         }
-        match appliquer_enveloppe(&source, &sortie, enveloppe) {
+        match apply_envelope(&source, &output, envelope) {
             Ok(()) => {
-                eprintln!("Enveloppe {enveloppe:.0} ms appliquee : {sortie}");
+                eprintln!("Enveloppe {envelope:.0} ms appliquee : {output}");
                 return;
             }
             Err(e) => {
@@ -177,14 +180,14 @@ fn main() {
         }
     }
 
-    if chemin_sofa.is_empty() || sortie.is_empty() {
-        eprintln!("--sofa et --sortie sont obligatoires.\n");
-        aide();
+    if sofa_path.is_empty() || output.is_empty() {
+        eprintln!("--sofa et --output sont obligatoires.\n");
+        help();
         std::process::exit(1);
     }
 
-    let jeu = match sofa::JeuSofa::ouvrir(&chemin_sofa, FREQUENCE) {
-        Ok(j) => j,
+    let set = match sofa::SofaSet::open(&sofa_path, SAMPLE_RATE) {
+        Ok(s) => s,
         Err(e) => {
             eprintln!("{e}");
             std::process::exit(1);
@@ -193,43 +196,43 @@ fn main() {
 
     eprintln!(
         "HRTF : {} points par reponse, {} Hz",
-        jeu.longueur, jeu.frequence
+        set.length, set.sample_rate
     );
     eprintln!(
         "Salle : {:.1} x {:.1} x {:.1} m, absorption {:.2}, RT60 {:.2} s",
-        s.largeur,
-        s.profondeur,
-        s.hauteur,
-        s.absorption,
-        s.rt60()
+        r.width,
+        r.depth,
+        r.height,
+        r.absorption,
+        r.rt60()
     );
 
     // Une BRIR par enceinte, puis repartition dans les 14 canaux HeSuVi.
-    let brirs: Vec<salle::Brir> = hesuvi::ENCEINTES
+    let brirs: Vec<room::Brir> = hesuvi::SPEAKERS
         .iter()
-        .map(|(nom, azimut)| {
-            eprintln!("  {nom:<3} azimut {azimut:>7.1} deg");
-            salle::synthetiser(&jeu, &s, *azimut, 0.0, duree, graine)
+        .map(|(name, azimuth)| {
+            eprintln!("  {name:<3} azimut {azimuth:>7.1} deg");
+            room::synthesize(&set, &r, *azimuth, 0.0, duration, seed)
         })
         .collect();
 
-    let canaux: Vec<Vec<f32>> = hesuvi::PLAN
+    let channels: Vec<Vec<f32>> = hesuvi::LAYOUT
         .iter()
-        .map(|(enceinte, oreille)| {
-            let b = &brirs[*enceinte];
-            if *oreille == 0 {
-                b.gauche.clone()
+        .map(|(speaker, ear)| {
+            let b = &brirs[*speaker];
+            if *ear == 0 {
+                b.left.clone()
             } else {
-                b.droite.clone()
+                b.right.clone()
             }
         })
         .collect();
 
-    match hesuvi::ecrire(&sortie, &canaux, FREQUENCE, true) {
+    match hesuvi::write(&output, &channels, SAMPLE_RATE, true) {
         Ok(()) => eprintln!(
-            "\nEcrit : {sortie}\n{} canaux, {:.0} ms",
-            canaux.len(),
-            duree * 1000.0
+            "\nEcrit : {output}\n{} canaux, {:.0} ms",
+            channels.len(),
+            duration * 1000.0
         ),
         Err(e) => {
             eprintln!("ecriture impossible : {e}");

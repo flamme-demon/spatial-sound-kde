@@ -11,7 +11,7 @@ use std::io::{BufWriter, Write};
 
 /// Enceintes d'un 7.1, avec leur azimut en degres.
 /// Convention : 0 devant, positif vers la gauche.
-pub const ENCEINTES: [(&str, f32); 7] = [
+pub const SPEAKERS: [(&str, f32); 7] = [
     ("FL", 30.0),
     ("SL", 90.0),
     ("RL", 135.0),
@@ -22,7 +22,7 @@ pub const ENCEINTES: [(&str, f32); 7] = [
 ];
 
 /// Canal HeSuVi -> (indice d'enceinte, oreille) ; 0 = gauche, 1 = droite.
-pub const PLAN: [(usize, usize); 14] = [
+pub const LAYOUT: [(usize, usize); 14] = [
     (0, 0), // 0  FL -> G
     (0, 1), // 1  FL -> D
     (1, 0), // 2  SL -> G
@@ -40,18 +40,18 @@ pub const PLAN: [(usize, usize); 14] = [
 ];
 
 /// Ecrit un WAV PCM 16 bits entrelace.
-/// `normaliser` : viser le gain de convolution des profils de reference.
+/// `normalize` : viser le gain de convolution des profils de reference.
 /// A desactiver quand on retravaille un profil existant — renormaliser ferait
 /// varier le volume a chaque mouvement du reglage, ce qui rend toute comparaison
 /// a l'oreille trompeuse. Seule la garde anti-saturation reste active.
-pub fn ecrire(
-    chemin: &str,
-    canaux: &[Vec<f32>],
-    frequence: u32,
-    normaliser: bool,
+pub fn write(
+    path: &str,
+    channels: &[Vec<f32>],
+    sample_rate: u32,
+    normalize: bool,
 ) -> std::io::Result<()> {
-    let nb = canaux.len() as u16;
-    let n = canaux.iter().map(|c| c.len()).max().unwrap_or(0);
+    let nb = channels.len() as u16;
+    let n = channels.iter().map(|c| c.len()).max().unwrap_or(0);
 
     // Normalisation par l'ENERGIE, pas par la crete.
     //
@@ -63,42 +63,42 @@ pub fn ecrire(
     //
     // On vise donc le gain de convolution des profils de reference (environ -2 dB),
     // puis on borne la crete par securite.
-    const GAIN_VISE: f32 = 0.80; // -1,9 dB en puissance
-    let energie_max = canaux
+    const TARGET_GAIN: f32 = 0.80; // -1,9 dB en puissance
+    let max_energy = channels
         .iter()
         .map(|c| c.iter().map(|v| v * v).sum::<f32>())
         .fold(0.0f32, f32::max);
-    let mut gain = if normaliser && energie_max > 0.0 {
-        GAIN_VISE / energie_max.sqrt()
+    let mut gain = if normalize && max_energy > 0.0 {
+        TARGET_GAIN / max_energy.sqrt()
     } else {
         1.0
     };
-    let crete = canaux
+    let peak = channels
         .iter()
         .flat_map(|c| c.iter())
         .fold(0.0f32, |m, v| m.max(v.abs()));
-    if crete * gain > 0.95 {
-        gain = 0.95 / crete;
+    if peak * gain > 0.95 {
+        gain = 0.95 / peak;
     }
 
-    let octets_donnees = (n * nb as usize * 2) as u32;
-    let mut f = BufWriter::new(File::create(chemin)?);
+    let data_bytes = (n * nb as usize * 2) as u32;
+    let mut f = BufWriter::new(File::create(path)?);
 
     f.write_all(b"RIFF")?;
-    f.write_all(&(36 + octets_donnees).to_le_bytes())?;
+    f.write_all(&(36 + data_bytes).to_le_bytes())?;
     f.write_all(b"WAVEfmt ")?;
     f.write_all(&16u32.to_le_bytes())?;
     f.write_all(&1u16.to_le_bytes())?; // PCM
     f.write_all(&nb.to_le_bytes())?;
-    f.write_all(&frequence.to_le_bytes())?;
-    f.write_all(&(frequence * nb as u32 * 2).to_le_bytes())?;
+    f.write_all(&sample_rate.to_le_bytes())?;
+    f.write_all(&(sample_rate * nb as u32 * 2).to_le_bytes())?;
     f.write_all(&(nb * 2).to_le_bytes())?;
     f.write_all(&16u16.to_le_bytes())?;
     f.write_all(b"data")?;
-    f.write_all(&octets_donnees.to_le_bytes())?;
+    f.write_all(&data_bytes.to_le_bytes())?;
 
     for i in 0..n {
-        for c in canaux {
+        for c in channels {
             let v = c.get(i).copied().unwrap_or(0.0) * gain;
             let e = (v.clamp(-1.0, 1.0) * 32767.0).round() as i16;
             f.write_all(&e.to_le_bytes())?;

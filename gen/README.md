@@ -6,11 +6,11 @@ consommable par le projet.
 ```bash
 cargo build --release
 ./target/release/spatial-sound-gen \
-    --sofa kemar.sofa --preset cabine \
-    --sortie ~/.local/share/pipewire/hrir_hesuvi/ma_salle.wav
+    --sofa kemar.sofa --preset booth \
+    --output ~/.local/share/pipewire/hrir_hesuvi/ma_salle.wav
 ```
 
-Presets : `cabine`, `studio`, `regie`, `salon`. Tous les parametres restent
+Presets : `booth`, `studio`, `control-room`, `living-room`. Tous les parametres restent
 ajustables individuellement (`--help`).
 
 Il faut un jeu HRTF au format SOFA, par exemple sur
