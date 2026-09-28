@@ -188,10 +188,14 @@ pub fn synthesize(
     // Les images sont regroupees par direction : convoluer une HRTF par image
     // couterait des milliers de convolutions pour un resultat identique, les
     // directions voisines partageant la meme reponse a l'oreille pres.
+    //
+    // BTreeMap et non HashMap : l'ordre de parcours fixe celui des sommes
+    // flottantes plus bas. Celui d'une HashMap change a chaque execution, et deux
+    // generations aux memes parametres differaient alors d'un echantillon.
     const AZ_STEP: f32 = 15.0;
     const EL_STEP: f32 = 30.0;
-    let mut buckets: std::collections::HashMap<(i32, i32), Vec<f32>> =
-        std::collections::HashMap::new();
+    let mut buckets: std::collections::BTreeMap<(i32, i32), Vec<f32>> =
+        std::collections::BTreeMap::new();
 
     let order = room.order.max(0);
     let mut late_energy = 0.0f32;
