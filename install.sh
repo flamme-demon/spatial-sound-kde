@@ -13,9 +13,9 @@ set -euo pipefail
 # des la premiere correspondance, le producteur meurt de SIGPIPE, et pipefail
 # propage cet echec — le test echoue donc precisement quand il trouve. On
 # capture la sortie avant de la tester.
-contient() { [[ "$1" == *"$2"* ]]; }
+contains() { [[ "$1" == *"$2"* ]]; }
 
-PROJET="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HRIR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
 HPCF_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
 # La chaine tourne dans une instance PipeWire dediee, pas dans le serveur
@@ -30,51 +30,51 @@ CONF="$CONF_DIR/99-spatial-sound.conf"
 # convolution derriere lui est rechargee quand on change de profil.
 CONF_SINK_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d"
 CONF_SINK="$CONF_SINK_DIR/98-spatial-sound-sink.conf"
-NOM_SINK="spatial-sound-sink"
+SINK_NAME="spatial-sound-sink"
 # Emplacements d'avant la 0.1.0 : charges par le serveur principal, ou sous
 # l'ancien nom de fichier. Les deux doivent disparaitre, sinon deux sinks
 # coexistent et le son passe par le mauvais.
-CONFS_ANCIENS=(
+LEGACY_CONFS=(
   "${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/99-surround-casque.conf"
   "${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/pipewire.conf.d/99-spatial-sound.conf"
   "${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/filter-chain.conf.d/99-surround-casque.conf"
 )
-UNITE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/spatial-sound.service"
+UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/spatial-sound.service"
 BIN_DIR="$HOME/.local/bin"
 TEST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/tests-surround"
-ETAT="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/spatial-sound.state"
+STATE_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/spatial-sound.state"
 PLASMOID_ID="org.spatialsound.kde"
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/$PLASMOID_ID"
 # Identifiants utilises avant la 0.1.0, a nettoyer pour eviter les doublons
 # dans le navigateur de widgets.
-PLASMOIDS_ANCIENS=(
+LEGACY_PLASMOIDS=(
   "${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.pwsurround"
   "${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.pwsurround.spatialsound"
 )
-ICONES_ANCIENNES=(
+LEGACY_ICONS=(
   "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/org.pwsurround.spatialsound.svg"
 )
-UNITE_ANCIENNE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/pw-surround.service"
-ETAT_ANCIEN="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/pw-surround.state"
+LEGACY_UNIT="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/pw-surround.service"
+LEGACY_STATE="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/pw-surround.state"
 
 HRIR_REPO="https://github.com/loteran/arctis-virtual-surround.git"
-PROFIL_DEFAUT="cmss_game"
+DEFAULT_PROFILE="cmss_game"
 SET_DEFAULT_SINK=1
 INSTALL_DEPS=1
 ASSUME_YES=0
 HRIR_LOCAL=""
 
-rouge()  { printf '\033[31m%s\033[0m\n' "$*"; }
-vert()   { printf '\033[32m%s\033[0m\n' "$*"; }
-jaune()  { printf '\033[33m%s\033[0m\n' "$*"; }
-titre()  { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
-mourir() { rouge "ERREUR : $*"; exit 1; }
+red()  { printf '\033[31m%s\033[0m\n' "$*"; }
+green()   { printf '\033[32m%s\033[0m\n' "$*"; }
+yellow()  { printf '\033[33m%s\033[0m\n' "$*"; }
+title()  { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
+die() { red "ERREUR : $*"; exit 1; }
 
 usage() {
   cat <<EOF
 Usage : ./install.sh [options]
 
-  --profil <nom>     profil HRIR initial (defaut : $PROFIL_DEFAUT)
+  --profile <nom>    profil HRIR initial (defaut : $DEFAULT_PROFILE)
   --hrir-dir <chem>  utilise un dossier de WAV HeSuVi local au lieu de telecharger
   --no-default-sink  n'impose pas le sink virtuel comme sortie par defaut
   --no-deps          n'installe aucune dependance via pacman
@@ -89,26 +89,27 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --profil)          PROFIL_DEFAUT="$2"; shift 2 ;;
+    # --profil : nom de l'option avant la 1.1, garde en alias.
+    --profile|--profil) DEFAULT_PROFILE="$2"; shift 2 ;;
     --hrir-dir)        HRIR_LOCAL="$2"; shift 2 ;;
     --no-default-sink) SET_DEFAULT_SINK=0; shift ;;
     --no-deps)         INSTALL_DEPS=0; shift ;;
     -y|--yes)          ASSUME_YES=1; shift ;;
     -h|--help)         usage; exit 0 ;;
-    *) mourir "option inconnue : $1 (voir --help)" ;;
+    *) die "option inconnue : $1 (voir --help)" ;;
   esac
 done
 
-confirmer() {
+confirm() {
   [[ $ASSUME_YES -eq 1 ]] && return 0
   read -rp "$1 [O/n] " r
   [[ -z "$r" || "$r" =~ ^[oOyY] ]]
 }
 
 # ---------------------------------------------------------------- verifications
-titre "Verification de l'environnement"
+title "Verification de l'environnement"
 
-[[ $EUID -eq 0 ]] && mourir "ne pas lancer en root : la config est par utilisateur."
+[[ $EUID -eq 0 ]] && die "ne pas lancer en root : la config est par utilisateur."
 
 # Compare deux versions : vrai si $1 >= $2. sort -V gere les numeros multi-champs
 # la ou une comparaison lexicale se tromperait (0.3.9 vs 0.3.60).
@@ -118,20 +119,20 @@ version_ge() {
 
 # surround-profil utilise des tableaux associatifs : bash 4 minimum.
 if (( BASH_VERSINFO[0] < 4 )); then
-  mourir "bash ${BASH_VERSION} trop ancien : bash 4.0 minimum (tableaux associatifs)."
+  die "bash ${BASH_VERSION} trop ancien : bash 4.0 minimum (tableaux associatifs)."
 fi
 
-for outil in pactl paplay systemctl python3; do
-  command -v "$outil" >/dev/null \
-    || mourir "$outil introuvable — requis. (pactl/paplay : libpulse ; systemctl : systemd ; python3)"
+for tool in pactl paplay systemctl python3; do
+  command -v "$tool" >/dev/null \
+    || die "$tool introuvable — requis. (pactl/paplay : libpulse ; systemctl : systemd ; python3)"
 done
 
-SERVEUR="$(pactl info 2>/dev/null | sed -n 's/^Server Name: //p')"
-case "$SERVEUR" in
-  *PipeWire*) vert "  PipeWire detecte : $SERVEUR" ;;
-  "")         mourir "aucun serveur audio joignable. Session utilisateur active ?" ;;
-  *)          rouge "  serveur audio : $SERVEUR"
-              mourir "PulseAudio classique n'est pas supporte : ce script s'appuie sur
+SERVER="$(pactl info 2>/dev/null | sed -n 's/^Server Name: //p')"
+case "$SERVER" in
+  *PipeWire*) green "  PipeWire detecte : $SERVER" ;;
+  "")         die "aucun serveur audio joignable. Session utilisateur active ?" ;;
+  *)          red "  serveur audio : $SERVER"
+              die "PulseAudio classique n'est pas supporte : ce script s'appuie sur
        module-filter-chain de PipeWire. Sous PulseAudio pur, voir
        module-virtual-surround-sink (approche differente)." ;;
 esac
@@ -142,56 +143,56 @@ esac
 PW_MIN="0.3.60"
 PW_VER="$(pipewire --version 2>/dev/null | sed -n 's/.*libpipewire \([0-9][0-9.]*\).*/\1/p' | head -1)"
 if [[ -z "$PW_VER" ]]; then
-  jaune "  version PipeWire indeterminee — verification ignoree ($PW_MIN attendu)"
+  yellow "  version PipeWire indeterminee — verification ignoree ($PW_MIN attendu)"
 elif version_ge "$PW_VER" "$PW_MIN"; then
-  vert "  version PipeWire : $PW_VER (>= $PW_MIN)"
+  green "  version PipeWire : $PW_VER (>= $PW_MIN)"
 else
-  mourir "PipeWire $PW_VER trop ancien : $PW_MIN minimum.
+  die "PipeWire $PW_VER trop ancien : $PW_MIN minimum.
        En dessous, le sink se cree mais ne produit aucun son."
 fi
 
 if [[ -z "$(find /usr/lib /usr/lib64 /usr/local/lib -name "libpipewire-module-filter-chain.so" 2>/dev/null | head -1)" ]]; then
-  mourir "module-filter-chain absent. Installer le paquet 'pipewire-audio'."
+  die "module-filter-chain absent. Installer le paquet 'pipewire-audio'."
 fi
-vert "  module-filter-chain present"
+green "  module-filter-chain present"
 
 command -v pw-link >/dev/null \
-  || jaune "  pw-link absent : la verification finale des liens sera ignoree"
+  || yellow "  pw-link absent : la verification finale des liens sera ignoree"
 
 # ------------------------------------------------------------------ dependances
 if [[ $INSTALL_DEPS -eq 1 ]]; then
-  titre "Dependances"
-  MANQUANT=()
-  command -v ffprobe >/dev/null || MANQUANT+=(ffmpeg)
-  command -v git     >/dev/null || MANQUANT+=(git)
-  python3 -c "import numpy"      2>/dev/null || MANQUANT+=(python-numpy)
-  python3 -c "import scipy.io"   2>/dev/null || MANQUANT+=(python-scipy)
+  title "Dependances"
+  MISSING=()
+  command -v ffprobe >/dev/null || MISSING+=(ffmpeg)
+  command -v git     >/dev/null || MISSING+=(git)
+  python3 -c "import numpy"      2>/dev/null || MISSING+=(python-numpy)
+  python3 -c "import scipy.io"   2>/dev/null || MISSING+=(python-scipy)
 
-  if [[ ${#MANQUANT[@]} -gt 0 ]]; then
-    jaune "  manquant : ${MANQUANT[*]}"
+  if [[ ${#MISSING[@]} -gt 0 ]]; then
+    yellow "  manquant : ${MISSING[*]}"
     if command -v pacman >/dev/null; then
-      if confirmer "  Installer via pacman ?"; then
-        sudo pacman -S --needed --noconfirm "${MANQUANT[@]}"
+      if confirm "  Installer via pacman ?"; then
+        sudo pacman -S --needed --noconfirm "${MISSING[@]}"
       else
-        jaune "  ignore — le script de mesure et les tests peuvent echouer."
+        yellow "  ignore — le script de mesure et les tests peuvent echouer."
       fi
     else
-      jaune "  pacman absent : installe manuellement ${MANQUANT[*]}"
+      yellow "  pacman absent : installe manuellement ${MISSING[*]}"
     fi
   else
-    vert "  toutes presentes"
+    green "  toutes presentes"
   fi
 fi
 
 # ------------------------------------------------------------------------ HRIR
-titre "Jeux de reponses impulsionnelles (HRIR)"
+title "Jeux de reponses impulsionnelles (HRIR)"
 mkdir -p "$HRIR_DIR"
 
-nb_wav() { find "$HRIR_DIR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' 2>/dev/null | wc -l; }
+count_wav() { find "$HRIR_DIR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' 2>/dev/null | wc -l; }
 
 if [[ -n "$HRIR_LOCAL" ]]; then
-  [[ -d "$HRIR_LOCAL" ]] || mourir "dossier introuvable : $HRIR_LOCAL"
-  compgen -G "$HRIR_LOCAL/*.wav" >/dev/null || mourir "aucun .wav dans $HRIR_LOCAL"
+  [[ -d "$HRIR_LOCAL" ]] || die "dossier introuvable : $HRIR_LOCAL"
+  compgen -G "$HRIR_LOCAL/*.wav" >/dev/null || die "aucun .wav dans $HRIR_LOCAL"
   # Un dossier fourni a la main contient souvent des WAV stereo : sans ce controle,
   # l'installation reussit et le sink reste muet.
   if command -v ffprobe >/dev/null; then
@@ -200,82 +201,91 @@ if [[ -n "$HRIR_LOCAL" ]]; then
       [[ "$(ffprobe -v error -select_streams a:0 -show_entries stream=channels \
             -of csv=p=0 "$f" 2>/dev/null)" == "14" ]] && ((n14++)) || true
     done
-    (( n14 > 0 )) || mourir "aucun WAV 14 canaux dans $HRIR_LOCAL.
+    (( n14 > 0 )) || die "aucun WAV 14 canaux dans $HRIR_LOCAL.
        Le format attendu est celui de HeSuVi (14 canaux), pas des paires stereo."
-    vert "  $n14 fichier(s) 14 canaux valides"
+    green "  $n14 fichier(s) 14 canaux valides"
   fi
   cp -f "$HRIR_LOCAL"/*.wav "$HRIR_DIR"/
-  vert "  copies depuis $HRIR_LOCAL"
-elif [[ -d "$PROJET/share/hrir" ]] && compgen -G "$PROJET/share/hrir/*.wav" >/dev/null; then
-  cp -f "$PROJET/share/hrir"/*.wav "$HRIR_DIR"/
-  vert "  copies depuis le depot local"
-elif [[ $(nb_wav) -gt 10 ]]; then
-  vert "  deja presents ($(nb_wav) profils), telechargement ignore"
+  green "  copies depuis $HRIR_LOCAL"
+elif [[ -d "$PROJECT_DIR/share/hrir" ]] && compgen -G "$PROJECT_DIR/share/hrir/*.wav" >/dev/null; then
+  cp -f "$PROJECT_DIR/share/hrir"/*.wav "$HRIR_DIR"/
+  green "  copies depuis le depot local"
+elif [[ $(count_wav) -gt 10 ]]; then
+  green "  deja presents ($(count_wav) profils), telechargement ignore"
 else
   echo "  telechargement depuis $HRIR_REPO ..."
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
   git clone --depth 1 -q "$HRIR_REPO" "$TMP/src" \
-    || mourir "telechargement impossible. Reessaie, ou fournis --hrir-dir <dossier>."
+    || die "telechargement impossible. Reessaie, ou fournis --hrir-dir <dossier>."
   find "$TMP/src" -name '*.wav' -exec cp -f {} "$HRIR_DIR"/ \;
-  vert "  $(nb_wav) profils installes"
+  green "  $(count_wav) profils installes"
 fi
 
-[[ $(nb_wav) -gt 0 ]] || mourir "aucun HRIR disponible dans $HRIR_DIR"
+[[ $(count_wav) -gt 0 ]] || die "aucun HRIR disponible dans $HRIR_DIR"
 
 # Le profil demande doit exister ET faire 14 canaux (format HeSuVi attendu).
-valider_14ch() {
+is_14ch() {
   local f="$1"
   command -v ffprobe >/dev/null || return 0   # pas de ffprobe : on fait confiance
   [[ "$(ffprobe -v error -select_streams a:0 -show_entries stream=channels \
         -of csv=p=0 "$f" 2>/dev/null)" == "14" ]]
 }
 
-if [[ ! -f "$HRIR_DIR/$PROFIL_DEFAUT.wav" ]] || ! valider_14ch "$HRIR_DIR/$PROFIL_DEFAUT.wav"; then
-  jaune "  '$PROFIL_DEFAUT' absent ou non 14 canaux, recherche d'un remplacant..."
+if [[ ! -f "$HRIR_DIR/$DEFAULT_PROFILE.wav" ]] || ! is_14ch "$HRIR_DIR/$DEFAULT_PROFILE.wav"; then
+  yellow "  '$DEFAULT_PROFILE' absent ou non 14 canaux, recherche d'un remplacant..."
   for c in cmss_game sonic atmos dtshx EAC_Default; do
-    if [[ -f "$HRIR_DIR/$c.wav" ]] && valider_14ch "$HRIR_DIR/$c.wav"; then
-      PROFIL_DEFAUT="$c"; break
+    if [[ -f "$HRIR_DIR/$c.wav" ]] && is_14ch "$HRIR_DIR/$c.wav"; then
+      DEFAULT_PROFILE="$c"; break
     fi
   done
-  [[ -f "$HRIR_DIR/$PROFIL_DEFAUT.wav" ]] || mourir "aucun profil 14 canaux exploitable."
+  [[ -f "$HRIR_DIR/$DEFAULT_PROFILE.wav" ]] || die "aucun profil 14 canaux exploitable."
 fi
 # Recense les profils livres, pour distinguer ensuite ceux que l'utilisateur
 # ajoute lui-meme : sans cette liste, l'applet devrait afficher les 58 fichiers
 # HeSuVi, variantes inexploitables comprises.
-[[ -f "$PROJET/share/hesuvi-profils.txt" ]] \
-  && install -m644 "$PROJET/share/hesuvi-profils.txt" "$HRIR_DIR/.hesuvi"
+[[ -f "$PROJECT_DIR/share/hesuvi-profiles.txt" ]] \
+  && install -m644 "$PROJECT_DIR/share/hesuvi-profiles.txt" "$HRIR_DIR/.hesuvi"
 
-ln -sfn "$HRIR_DIR/$PROFIL_DEFAUT.wav" "$HRIR_DIR/hrir.wav"
-vert "  profil initial : $PROFIL_DEFAUT"
+ln -sfn "$HRIR_DIR/$DEFAULT_PROFILE.wav" "$HRIR_DIR/hrir.wav"
+green "  profil initial : $DEFAULT_PROFILE"
 
 # -------------------------------------------------- correction de casque (HpCF)
-titre "Correction de casque"
+title "Correction de casque"
 mkdir -p "$HPCF_DIR"
+
+# Avant la 1.1, l'impulsion neutre s'appelait aucune.wav. La renommer, plutot
+# que d'en generer une seconde, evite qu'elle apparaisse comme un casque dans
+# l'applet ; le lien actif qui la designait est reoriente.
+if [[ -f "$HPCF_DIR/aucune.wav" && ! -f "$HPCF_DIR/none.wav" ]]; then
+  mv "$HPCF_DIR/aucune.wav" "$HPCF_DIR/none.wav"
+  [[ "$(readlink "$HPCF_DIR/hpcf.wav" 2>/dev/null)" == "$HPCF_DIR/aucune.wav" ]] \
+    && ln -sfn "$HPCF_DIR/none.wav" "$HPCF_DIR/hpcf.wav"
+fi
 
 # Impulsion unite : convoluer par elle ne modifie rien. C'est la valeur « aucune
 # correction », et elle doit exister meme si l'utilisateur n'installe jamais de
 # filtre, car l'etage de convolution est toujours present dans le graphe.
-if [[ ! -f "$HPCF_DIR/aucune.wav" ]]; then
-  python3 - "$HPCF_DIR/aucune.wav" <<'IMPULSION'
+if [[ ! -f "$HPCF_DIR/none.wav" ]]; then
+  python3 - "$HPCF_DIR/none.wav" <<'IMPULSE'
 import struct, sys, wave
 with wave.open(sys.argv[1], "wb") as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(48000)
     w.writeframes(struct.pack("<hh", 32767, 32767))
-IMPULSION
-  vert "  impulsion neutre generee"
+IMPULSE
+  green "  impulsion neutre generee"
 fi
 
 # On ne choisit jamais de correction a la place de l'utilisateur : un filtre prevu
 # pour un autre casque degrade le son au lieu de l'ameliorer.
-[[ -e "$HPCF_DIR/hpcf.wav" ]] || ln -sfn "$HPCF_DIR/aucune.wav" "$HPCF_DIR/hpcf.wav"
-vert "  correction active : $(basename "$(readlink -f "$HPCF_DIR/hpcf.wav")" .wav)"
+[[ -e "$HPCF_DIR/hpcf.wav" ]] || ln -sfn "$HPCF_DIR/none.wav" "$HPCF_DIR/hpcf.wav"
+green "  correction active : $(basename "$(readlink -f "$HPCF_DIR/hpcf.wav")" .wav)"
 
-install -m644 "$PROJET/share/hpcf-index.tsv" "$HPCF_DIR/index.tsv"
-vert "  index : $(grep -vc '^#' "$HPCF_DIR/index.tsv") casques mesures (AutoEQ)"
+install -m644 "$PROJECT_DIR/share/hpcf-index.tsv" "$HPCF_DIR/index.tsv"
+green "  index : $(grep -vc '^#' "$HPCF_DIR/index.tsv") casques mesures (AutoEQ)"
 
 # ---------------------------------------------------------------- configuration
-titre "Configuration du sink virtuel"
+title "Configuration du sink virtuel"
 mkdir -p "$CONF_DIR"
 
 # Sortie physique de reference, vers laquelle la chaine enverra son resultat.
@@ -284,21 +294,22 @@ mkdir -p "$CONF_DIR"
 # passive, donc routee par WirePlumber vers le peripherique par defaut — qui est
 # desormais notre propre sink. Sans ancrage explicite, la chaine se rebranche sur
 # sa propre entree et plus aucun son ne sort.
-est_a_nous() {
-  [[ "$1" == *virtual-surround* || "$1" == "$NOM_SINK" || "$1" == effect_* ]]
+is_ours() {
+  [[ "$1" == *virtual-surround* || "$1" == "$SINK_NAME" || "$1" == effect_* ]]
 }
-sortie_physique() {
+physical_output() {
   local c
   # 1. la valeur memorisee, si elle designe toujours un peripherique reel
-  if [[ -f "$ETAT" ]]; then
-    c="$(sed -n 's/^sink_precedent=//p' "$ETAT")"
-    if [[ -n "$c" ]] && ! est_a_nous "$c" && contient "$(pactl list sinks short 2>/dev/null || true)" "$c"; then
+  if [[ -f "$STATE_FILE" ]]; then
+    # sink_precedent : nom de la cle avant la 1.1.
+    c="$(sed -n 's/^\(previous_sink\|sink_precedent\)=//p' "$STATE_FILE")"
+    if [[ -n "$c" ]] && ! is_ours "$c" && contains "$(pactl list sinks short 2>/dev/null || true)" "$c"; then
       echo "$c"; return
     fi
   fi
   # 2. la sortie par defaut actuelle, si ce n'est pas une des notres
   c="$(pactl get-default-sink 2>/dev/null || true)"
-  if [[ -n "$c" ]] && ! est_a_nous "$c"; then echo "$c"; return; fi
+  if [[ -n "$c" ]] && ! is_ours "$c"; then echo "$c"; return; fi
   # 3. a defaut, une sortie materielle, en ecartant le HDMI qui est rarement
   #    celle du casque
   c="$(pactl list sinks short 2>/dev/null \
@@ -307,18 +318,18 @@ sortie_physique() {
   pactl list sinks short 2>/dev/null | awk '$2 ~ /^alsa_output/ {print $2; exit}'
 }
 
-ANCIEN_SINK="$(sortie_physique)"
-if [[ -n "$ANCIEN_SINK" ]]; then
-  printf 'sink_precedent=%s\n' "$ANCIEN_SINK" > "$ETAT"
-  vert "  sortie physique : $ANCIEN_SINK"
+PREVIOUS_SINK="$(physical_output)"
+if [[ -n "$PREVIOUS_SINK" ]]; then
+  printf 'previous_sink=%s\n' "$PREVIOUS_SINK" > "$STATE_FILE"
+  green "  sortie physique : $PREVIOUS_SINK"
 else
-  rouge "  aucune sortie physique identifiee — la chaine n'aura pas de destination."
+  red "  aucune sortie physique identifiee — la chaine n'aura pas de destination."
 fi
 
 # Graphe genere ici plutot que copie depuis /usr/share : le fichier d'exemple
 # n'existe pas sur toutes les distros, et son chemin HRIR relatif ne se resout pas.
 {
-  cat <<'ENTETE'
+  cat <<'HEADER'
 # Genere par Spatial Sound KDE — ne pas editer a la main.
 # Sink virtuel 7.1 convolue en binaural vers la sortie stereo par defaut.
 context.modules = [
@@ -337,14 +348,14 @@ context.modules = [
                     { type = builtin label = copy name = copySL  }
                     { type = builtin label = copy name = copySR  }
                     { type = builtin label = copy name = copyLFE }
-ENTETE
+HEADER
 
   # 14 convolueurs : chaque enceinte virtuelle vers chaque oreille.
   # L'ordre des canaux est celui du format HeSuVi, a ne pas reorganiser.
-  while read -r nom canal; do
+  while read -r name channel; do
     printf '                    { type = builtin label = convolver name = %-9s config = { filename = "%s" channel = %2s } }\n' \
-      "$nom" "$HRIR_DIR/hrir.wav" "$canal"
-  done <<'CANAUX'
+      "$name" "$HRIR_DIR/hrir.wav" "$channel"
+  done <<'CHANNELS'
 convFL_L 0
 convFL_R 1
 convSL_L 2
@@ -359,7 +370,7 @@ convSR_L 10
 convRR_R 11
 convRR_L 12
 convFC_R 13
-CANAUX
+CHANNELS
 
   # Le LFE n'a pas de HRIR propre : on le traite comme le canal central.
   printf '                    { type = builtin label = convolver name = convLFE_L config = { filename = "%s" channel =  6 } }\n' "$HRIR_DIR/hrir.wav"
@@ -367,16 +378,16 @@ CANAUX
 
   # Ligne d'ancrage optionnelle : si on a un peripherique physique de reference,
   # on empeche WirePlumber de router la sortie ailleurs (ex. USB > interne).
-  ANCRE=""
-  [[ -n "$ANCIEN_SINK" ]] && ANCRE=$'\n                target.object  = "'"$ANCIEN_SINK"'"'
+  ANCHOR=""
+  [[ -n "$PREVIOUS_SINK" ]] && ANCHOR=$'\n                target.object  = "'"$PREVIOUS_SINK"'"'
 
   # Delimiteur NON quote : $ANCRE doit s'etendre plus bas. Consequence, tout ce
   # bloc subit l'expansion du shell — n'y introduire ni $, ni backquote, ni
   # antislash sans les proteger.
-  cat <<PIED
+  cat <<FOOTER
                     { type = builtin label = mixer name = mixL }
                     { type = builtin label = mixer name = mixR }
-PIED
+FOOTER
 
   # Correction de casque (HpCF), apres la spatialisation : cet etage compense la
   # reponse du casque, il ne place rien. Il est TOUJOURS present dans le graphe et
@@ -386,7 +397,7 @@ PIED
   printf '                    { type = builtin label = convolver name = convHP_L config = { filename = "%s" channel = 0 } }\n' "$HPCF_DIR/hpcf.wav"
   printf '                    { type = builtin label = convolver name = convHP_R config = { filename = "%s" channel = 1 } }\n' "$HPCF_DIR/hpcf.wav"
 
-  cat <<PIED 
+  cat <<FOOTER 
                 ]
                 links = [
                     { output = "copyFL:Out"  input="convFL_L:In"  }
@@ -440,12 +451,12 @@ PIED
                 node.name      = "effect_output.virtual-surround-7.1-hesuvi"
                 node.passive   = true
                 audio.channels = 2
-                audio.position = [ FL FR ]${ANCRE:+$ANCRE}
+                audio.position = [ FL FR ]${ANCHOR:+$ANCHOR}
             }
         }
     }
 ]
-PIED
+FOOTER
 } > "$CONF"
 mkdir -p "$CONF_SINK_DIR"
 cat > "$CONF_SINK" <<SINK
@@ -457,7 +468,7 @@ context.objects = [
     { factory = adapter
         args = {
             factory.name     = support.null-audio-sink
-            node.name        = "$NOM_SINK"
+            node.name        = "$SINK_NAME"
             node.description = "Casque Surround 7.1 (binaural)"
             media.class      = Audio/Sink
             audio.position   = [ FL FR FC LFE RL RR SL SR ]
@@ -467,12 +478,12 @@ context.objects = [
     }
 ]
 SINK
-vert "  peripherique visible : $CONF_SINK"
-vert "  ecrit : $CONF"
+green "  peripherique visible : $CONF_SINK"
+green "  ecrit : $CONF"
 
 # Service dedie : c'est lui qui rend le changement de profil instantane.
-mkdir -p "$(dirname "$UNITE")"
-cat > "$UNITE" <<UNIT
+mkdir -p "$(dirname "$UNIT_FILE")"
+cat > "$UNIT_FILE" <<UNIT
 [Unit]
 Description=Spatial Sound KDE — chaine de convolution binaurale 7.1
 After=pipewire.service
@@ -490,38 +501,38 @@ Slice=session.slice
 WantedBy=pipewire.service
 UNIT
 systemctl --user daemon-reload
-vert "  service spatial-sound.service ecrit"
+green "  service spatial-sound.service ecrit"
 
 # ------------------------------------------------------------------- outillage
-titre "Outils"
+title "Outils"
 mkdir -p "$BIN_DIR" "$TEST_DIR"
-install -m 755 "$PROJET/bin/surround-profil" "$BIN_DIR/surround-profil"
-vert "  $BIN_DIR/surround-profil"
+install -m 755 "$PROJECT_DIR/bin/surround-profil" "$BIN_DIR/surround-profil"
+green "  $BIN_DIR/surround-profil"
 for t in analyse_hrir.py gen_tests.py; do
-  [[ -f "$PROJET/tools/$t" ]] && install -m 755 "$PROJET/tools/$t" "$TEST_DIR/$t" && vert "  $TEST_DIR/$t"
+  [[ -f "$PROJECT_DIR/tools/$t" ]] && install -m 755 "$PROJECT_DIR/tools/$t" "$TEST_DIR/$t" && green "  $TEST_DIR/$t"
 done
 
 # Generateur de salles : facultatif, il n'est requis que pour le reglage de
 # reverberation et la synthese. Sans cargo, le reste fonctionne a l'identique.
-if [[ -d "$PROJET/gen" ]]; then
+if [[ -d "$PROJECT_DIR/gen" ]]; then
   if command -v cargo >/dev/null; then
     echo "  compilation de spatial-sound-gen..."
-    if (cd "$PROJET/gen" && cargo build --release --quiet 2>/dev/null); then
-      install -m755 "$PROJET/gen/target/release/spatial-sound-gen" "$BIN_DIR/spatial-sound-gen"
-      vert "  $BIN_DIR/spatial-sound-gen"
+    if (cd "$PROJECT_DIR/gen" && cargo build --release --quiet 2>/dev/null); then
+      install -m755 "$PROJECT_DIR/gen/target/release/spatial-sound-gen" "$BIN_DIR/spatial-sound-gen"
+      green "  $BIN_DIR/spatial-sound-gen"
     else
-      jaune "  compilation echouee — reglage de reverberation indisponible"
-      jaune "  (verifie que libmysofa est installe)"
+      yellow "  compilation echouee — reglage de reverberation indisponible"
+      yellow "  (verifie que libmysofa est installe)"
     fi
   else
-    jaune "  cargo absent : reglage de reverberation indisponible"
+    yellow "  cargo absent : reglage de reverberation indisponible"
   fi
 fi
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) jaune "  $BIN_DIR n'est pas dans ton PATH."
-     jaune "  Ajoute a ~/.bashrc : export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  *) yellow "  $BIN_DIR n'est pas dans ton PATH."
+     yellow "  Ajoute a ~/.bashrc : export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
 esac
 
 # Applet Plasma : uniquement si KDE est present, sinon c'est du poids mort.
@@ -531,43 +542,43 @@ if command -v plasmashell >/dev/null; then
   # QML propres a Plasma 6 : sous Plasma 5 il s'installe mais refuse de charger.
   PLASMA_VER="$(plasmashell --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)"
   if [[ -z "$PLASMA_VER" ]]; then
-    jaune "  version de Plasma indeterminee — applet installe sans garantie"
+    yellow "  version de Plasma indeterminee — applet installe sans garantie"
     PLASMA_OK=1
   elif version_ge "$PLASMA_VER" "6.0"; then
     PLASMA_OK=1
   else
-    jaune "  Plasma $PLASMA_VER : l'applet exige Plasma 6, installation ignoree"
-    jaune "  (le reste fonctionne, utilise « surround-profil » en ligne de commande)"
+    yellow "  Plasma $PLASMA_VER : l'applet exige Plasma 6, installation ignoree"
+    yellow "  (le reste fonctionne, utilise « surround-profil » en ligne de commande)"
   fi
 fi
 
-if [[ -d "$PROJET/plasmoid" ]] && (( PLASMA_OK == 1 )); then
-  for ancien in "${PLASMOIDS_ANCIENS[@]}"; do
-    if [[ -d "$ancien" ]]; then
-      rm -rf "$ancien"
-      jaune "  ancien applet $(basename "$ancien") retire — a re-ajouter au panneau"
+if [[ -d "$PROJECT_DIR/plasmoid" ]] && (( PLASMA_OK == 1 )); then
+  for legacy in "${LEGACY_PLASMOIDS[@]}"; do
+    if [[ -d "$legacy" ]]; then
+      rm -rf "$legacy"
+      yellow "  ancien applet $(basename "$legacy") retire — a re-ajouter au panneau"
     fi
   done
-  rm -f "${ICONES_ANCIENNES[@]}"
+  rm -f "${LEGACY_ICONS[@]}"
   # Les catalogues .mo sont generes ici, pas versionnes : ils derivent des .po.
-  [[ -x "$PROJET/plasmoid/build-translations.sh" ]] \
-    && "$PROJET/plasmoid/build-translations.sh" >/dev/null 2>&1 || true
+  [[ -x "$PROJECT_DIR/plasmoid/build-translations.sh" ]] \
+    && "$PROJECT_DIR/plasmoid/build-translations.sh" >/dev/null 2>&1 || true
   rm -rf "$PLASMOID_DIR"
   mkdir -p "$PLASMOID_DIR"
-  cp -rp "$PROJET/plasmoid/." "$PLASMOID_DIR"/
+  cp -rp "$PROJECT_DIR/plasmoid/." "$PLASMOID_DIR"/
   rm -rf "$PLASMOID_DIR/po" "$PLASMOID_DIR/build-translations.sh"
 
   # L'icone doit vivre dans un theme, pas seulement dans le paquet : le
   # navigateur de widgets resout un NOM d'icone et ignore les chemins relatifs.
   ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
   mkdir -p "$ICON_DIR"
-  install -m644 "$PROJET/plasmoid/contents/icons/spatial-sound.svg" \
+  install -m644 "$PROJECT_DIR/plasmoid/contents/icons/spatial-sound.svg" \
     "$ICON_DIR/org.spatialsound.kde.svg"
   command -v gtk-update-icon-cache >/dev/null \
     && gtk-update-icon-cache -qtf "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" 2>/dev/null || true
-  vert "  icone deposee dans le theme hicolor"
-  LANGUES="$(find "$PLASMOID_DIR/contents/locale" -mindepth 1 -maxdepth 1 -type d -printf '%f ' 2>/dev/null)"
-  vert "  applet Plasma installe (langues : en ${LANGUES:-})"
+  green "  icone deposee dans le theme hicolor"
+  LANGUAGES="$(find "$PLASMOID_DIR/contents/locale" -mindepth 1 -maxdepth 1 -type d -printf '%f ' 2>/dev/null)"
+  green "  applet Plasma installe (langues : en ${LANGUAGES:-})"
   echo "    Ajoute-le : clic droit sur le bureau ou le panneau -> Ajouter des widgets"
   echo "    -> chercher « Spatial Sound »"
 
@@ -579,189 +590,189 @@ if [[ -d "$PROJET/plasmoid" ]] && (( PLASMA_OK == 1 )); then
     # est localise, et « date -d » refuse de le relire dans certaines langues.
     PID_PS="$(pgrep -x plasmashell | head -1)"
     AGE_PS="$(ps -o etimes= -p "$PID_PS" 2>/dev/null | tr -d ' ')"
-    DEMARRE_PS=$(( $(date +%s) - ${AGE_PS:-0} ))
-    DATE_QML="$(stat -c %Y "$PLASMOID_DIR/contents/ui/main.qml" 2>/dev/null || echo 0)"
-    if (( DEMARRE_PS > DATE_QML )); then
-      vert "  plasmashell a deja cette version en memoire"
-      PLASMA_A_JOUR=1
+    STARTED_PS=$(( $(date +%s) - ${AGE_PS:-0} ))
+    QML_MTIME="$(stat -c %Y "$PLASMOID_DIR/contents/ui/main.qml" 2>/dev/null || echo 0)"
+    if (( STARTED_PS > QML_MTIME )); then
+      green "  plasmashell a deja cette version en memoire"
+      PLASMA_UP_TO_DATE=1
     else
-      PLASMA_A_JOUR=0
-      jaune "  plasmashell tourne depuis $(( AGE_PS / 60 )) min, avec une version anterieure."
-      jaune "  Il faut le recharger pour voir celle-ci."
+      PLASMA_UP_TO_DATE=0
+      yellow "  plasmashell tourne depuis $(( AGE_PS / 60 )) min, avec une version anterieure."
+      yellow "  Il faut le recharger pour voir celle-ci."
     fi
   else
-    PLASMA_A_JOUR=1
+    PLASMA_UP_TO_DATE=1
   fi
 
-  if [[ "${PLASMA_A_JOUR:-1}" -eq 0 ]]; then
+  if [[ "${PLASMA_UP_TO_DATE:-1}" -eq 0 ]]; then
     if [[ $ASSUME_YES -eq 1 ]]; then
-      jaune "  Mode non interactif : rechargement non effectue. Lance a la main :"
+      yellow "  Mode non interactif : rechargement non effectue. Lance a la main :"
       echo  "      kquitapp6 plasmashell && kstart plasmashell"
-    elif confirmer "  Recharger plasmashell maintenant ? (le panneau disparait 1 a 2 s)"; then
+    elif confirm "  Recharger plasmashell maintenant ? (le panneau disparait 1 a 2 s)"; then
       if command -v kquitapp6 >/dev/null && command -v kstart >/dev/null; then
         kquitapp6 plasmashell >/dev/null 2>&1 || true
         sleep 1
         (kstart plasmashell >/dev/null 2>&1 &) 
         sleep 3
         pgrep -x plasmashell >/dev/null \
-          && vert "  plasmashell recharge" \
-          || rouge "  plasmashell ne s'est pas relance — lance : kstart plasmashell"
+          && green "  plasmashell recharge" \
+          || red "  plasmashell ne s'est pas relance — lance : kstart plasmashell"
       else
-        jaune "  kquitapp6/kstart absents. Deconnecte/reconnecte ta session."
+        yellow "  kquitapp6/kstart absents. Deconnecte/reconnecte ta session."
       fi
     else
       echo  "      Plus tard : kquitapp6 plasmashell && kstart plasmashell"
     fi
   fi
-elif [[ -d "$PROJET/plasmoid" ]] && ! command -v plasmashell >/dev/null; then
-  jaune "  Plasma absent : applet non installe (sans consequence)"
+elif [[ -d "$PROJECT_DIR/plasmoid" ]] && ! command -v plasmashell >/dev/null; then
+  yellow "  Plasma absent : applet non installe (sans consequence)"
 fi
 
 # --------------------------------------------------------------- redemarrage
-titre "Demarrage de la chaine"
+title "Demarrage de la chaine"
 # Une installation d'avant la 1.2 laisse la chaine dans le serveur principal :
 # il faut le redemarrer une fois pour que l'ancien sink disparaisse.
-if [[ -f "$UNITE_ANCIENNE" ]]; then
+if [[ -f "$LEGACY_UNIT" ]]; then
   systemctl --user disable --now pw-surround.service 2>/dev/null || true
-  rm -f "$UNITE_ANCIENNE"
+  rm -f "$LEGACY_UNIT"
   systemctl --user daemon-reload
-  jaune "  ancien service pw-surround.service retire"
+  yellow "  ancien service pw-surround.service retire"
 fi
-[[ -f "$ETAT_ANCIEN" && ! -f "$ETAT" ]] && mv "$ETAT_ANCIEN" "$ETAT"
-ANCIEN_TROUVE=0
-for c in "${CONFS_ANCIENS[@]}"; do
-  [[ -f "$c" ]] && { rm -f "$c"; ANCIEN_TROUVE=1; }
+[[ -f "$LEGACY_STATE" && ! -f "$STATE_FILE" ]] && mv "$LEGACY_STATE" "$STATE_FILE"
+LEGACY_FOUND=0
+for c in "${LEGACY_CONFS[@]}"; do
+  [[ -f "$c" ]] && { rm -f "$c"; LEGACY_FOUND=1; }
 done
-if (( ANCIEN_TROUVE )) || [[ ! "$(pactl list sinks short 2>/dev/null)" == *"$NOM_SINK"* ]]; then
-  (( ANCIEN_TROUVE )) && jaune "  ancienne configuration retiree"
+if (( LEGACY_FOUND )) || [[ ! "$(pactl list sinks short 2>/dev/null)" == *"$SINK_NAME"* ]]; then
+  (( LEGACY_FOUND )) && yellow "  ancienne configuration retiree"
   # WirePlumber reevalue ses regles de routage au redemarrage. Il restaure
   # normalement l'entree choisie par l'utilisateur, mais rien ne le garantit
   # sur toutes les configurations — et une entree changee en silence se
   # remarque au pire moment. On la remet donc explicitement.
-  SOURCE_AVANT="$(pactl get-default-source 2>/dev/null || true)"
+  SOURCE_BEFORE="$(pactl get-default-source 2>/dev/null || true)"
   systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
   sleep 2
-  if [[ -n "$SOURCE_AVANT" && "$SOURCE_AVANT" != "$(pactl get-default-source 2>/dev/null)" ]]; then
-    pactl set-default-source "$SOURCE_AVANT" 2>/dev/null \
-      && jaune "  entree par defaut restauree : $SOURCE_AVANT"
+  if [[ -n "$SOURCE_BEFORE" && "$SOURCE_BEFORE" != "$(pactl get-default-source 2>/dev/null)" ]]; then
+    pactl set-default-source "$SOURCE_BEFORE" 2>/dev/null \
+      && yellow "  entree par defaut restauree : $SOURCE_BEFORE"
   fi
 fi
 systemctl --user enable --now spatial-sound.service 2>/dev/null \
-  || jaune "  systemctl a echoue — deconnecte/reconnecte ta session."
+  || yellow "  systemctl a echoue — deconnecte/reconnecte ta session."
 systemctl --user restart spatial-sound.service 2>/dev/null || true
 
 for _ in $(seq 20); do
   sleep 0.5
-  contient "$(pactl list sinks short 2>/dev/null || true)" "$NOM_SINK" && break
+  contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK_NAME" && break
 done
 
-if ! contient "$(pactl list sinks short 2>/dev/null || true)" "$NOM_SINK"; then
-  rouge "  le sink virtuel n'est pas apparu."
+if ! contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK_NAME"; then
+  red "  le sink virtuel n'est pas apparu."
   echo "  Diagnostic : journalctl --user -u pipewire -n 50 | grep -i 'filter\\|convolv\\|error'"
   exit 1
 fi
-vert "  sink « Casque Surround 7.1 » actif"
+green "  sink « Casque Surround 7.1 » actif"
 
 # Migration depuis l'architecture d'avant la 0.4 : le peripherique par defaut
 # etait alors le noeud de la chaine elle-meme, qui n'est plus un sink. Laisse tel
 # quel, le systeme n'aurait plus aucune sortie valide.
-DEFAUT_COURANT="$(pactl get-default-sink 2>/dev/null || true)"
-if [[ "$DEFAUT_COURANT" == *virtual-surround* || "$DEFAUT_COURANT" == effect_* ]]; then
-  jaune "  ancien peripherique par defaut detecte : $DEFAUT_COURANT"
-  pactl set-default-sink "$NOM_SINK" 2>/dev/null \
-    && vert "  bascule sur le nouveau peripherique" \
-    || rouge "  bascule impossible — choisis « Casque Surround 7.1 » a la main"
+CURRENT_DEFAULT="$(pactl get-default-sink 2>/dev/null || true)"
+if [[ "$CURRENT_DEFAULT" == *virtual-surround* || "$CURRENT_DEFAULT" == effect_* ]]; then
+  yellow "  ancien peripherique par defaut detecte : $CURRENT_DEFAULT"
+  pactl set-default-sink "$SINK_NAME" 2>/dev/null \
+    && green "  bascule sur le nouveau peripherique" \
+    || red "  bascule impossible — choisis « Casque Surround 7.1 » a la main"
 fi
 
 if [[ $SET_DEFAULT_SINK -eq 1 ]]; then
-  pactl set-default-sink "$NOM_SINK"
-  vert "  defini comme sortie par defaut (ancienne : ${ANCIEN_SINK:-inconnue})"
+  pactl set-default-sink "$SINK_NAME"
+  green "  defini comme sortie par defaut (ancienne : ${PREVIOUS_SINK:-inconnue})"
 fi
 
 # ---------------------------------------------------------------- verification
-titre "Verification"
+title "Verification"
 if ! command -v pw-link >/dev/null; then
-  LIENS=-1
+  LINKS=-1
 else
-  LIENS="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' | grep -c '|->' || true)"
+  LINKS="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' | grep -c '|->' || true)"
 fi
-if [[ "${LIENS:-0}" -eq -1 ]]; then
-  jaune "  pw-link absent : liens non verifies"
-elif [[ "${LIENS:-0}" -ge 2 ]]; then
+if [[ "${LINKS:-0}" -eq -1 ]]; then
+  yellow "  pw-link absent : liens non verifies"
+elif [[ "${LINKS:-0}" -ge 2 ]]; then
   # Verifie que la sortie est connectee au bon peripherique
-  CIBLE="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' | grep '|->' | head -1 | sed 's/.*|-> //; s/:.*//')"
-  if [[ -n "$ANCIEN_SINK" && -n "$CIBLE" && "$CIBLE" != "$ANCIEN_SINK" ]]; then
-    jaune "  sortie connectee a $CIBLE au lieu de $ANCIEN_SINK"
-    jaune "  Reinstalle ou corrige a la main : pw-link ..."
+  TARGET="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' | grep '|->' | head -1 | sed 's/.*|-> //; s/:.*//')"
+  if [[ -n "$PREVIOUS_SINK" && -n "$TARGET" && "$TARGET" != "$PREVIOUS_SINK" ]]; then
+    yellow "  sortie connectee a $TARGET au lieu de $PREVIOUS_SINK"
+    yellow "  Reinstalle ou corrige a la main : pw-link ..."
   else
-    vert "  sortie reliee a $CIBLE ($LIENS liens)"
+    green "  sortie reliee a $TARGET ($LINKS liens)"
   fi
 else
-  jaune "  sortie non encore reliee — normal si aucun son ne joue."
-  jaune "  Elle se connectera au premier flux audio."
+  yellow "  sortie non encore reliee — normal si aucun son ne joue."
+  yellow "  Elle se connectera au premier flux audio."
 fi
 
 # Verification du chemin complet. Chaque point a deja casse au moins une fois :
 # un sink invisible du gestionnaire de session, une entree non capturee, et une
 # sortie rebouclee sur notre propre entree — silence total dans les trois cas.
-titre "Verification de la chaine"
-ETAPES_OK=1
+title "Verification de la chaine"
+CHECKS_OK=1
 
-if contient "$(pactl list sinks short 2>/dev/null || true)" "$NOM_SINK"; then
-  vert "  peripherique present"
+if contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK_NAME"; then
+  green "  peripherique present"
 else
-  rouge "  peripherique absent"; ETAPES_OK=0
+  red "  peripherique absent"; CHECKS_OK=0
 fi
 
 if command -v wpctl >/dev/null; then
   # Le gestionnaire de session adopte le noeud avec un leger retard apres le
   # demarrage du demon : sans attente, le controle echoue a tort.
-  VU=0
+  SEEN=0
   for _ in $(seq 20); do
-    contient "$(wpctl status 2>/dev/null || true)" "Casque Surround 7.1" && { VU=1; break; }
+    contains "$(wpctl status 2>/dev/null || true)" "Casque Surround 7.1" && { SEEN=1; break; }
     sleep 0.25
   done
-  if (( VU )); then
-    vert "  visible du gestionnaire de session (donc de l'applet de volume)"
+  if (( SEEN )); then
+    green "  visible du gestionnaire de session (donc de l'applet de volume)"
   else
-    jaune "  invisible du gestionnaire de session — l'applet de volume ne le listera pas"
-    ETAPES_OK=0
+    yellow "  invisible du gestionnaire de session — l'applet de volume ne le listera pas"
+    CHECKS_OK=0
   fi
 fi
 
 if command -v pw-link >/dev/null; then
-  if contient "$(pw-link -l 2>/dev/null | grep -A1 "$NOM_SINK:monitor_FL" || true)" "effect_input"; then
-    vert "  entree de la chaine reliee au peripherique"
+  if contains "$(pw-link -l 2>/dev/null | grep -A1 "$SINK_NAME:monitor_FL" || true)" "effect_input"; then
+    green "  entree de la chaine reliee au peripherique"
   else
-    jaune "  entree non reliee — elle se connectera au premier flux audio"
+    yellow "  entree non reliee — elle se connectera au premier flux audio"
   fi
 
   DEST="$(pw-link -lo 2>/dev/null | grep -A1 'effect_output.virtual-surround' \
           | grep '|->' | head -1 | sed 's/.*|-> //; s/:.*//')"
   if [[ -z "$DEST" ]]; then
-    jaune "  sortie non encore reliee — normal si aucun son ne joue"
-  elif [[ "$DEST" == "$NOM_SINK" || "$DEST" == effect_* ]]; then
-    rouge "  BOUCLE : la sortie revient sur notre propre entree ($DEST)"
-    rouge "  Aucun son ne sortira. Signale-le, c'est un defaut de l'installation."
-    ETAPES_OK=0
-  elif [[ -n "$ANCIEN_SINK" && "$DEST" != "$ANCIEN_SINK" ]]; then
-    jaune "  sortie vers $DEST au lieu de $ANCIEN_SINK"
+    yellow "  sortie non encore reliee — normal si aucun son ne joue"
+  elif [[ "$DEST" == "$SINK_NAME" || "$DEST" == effect_* ]]; then
+    red "  BOUCLE : la sortie revient sur notre propre entree ($DEST)"
+    red "  Aucun son ne sortira. Signale-le, c'est un defaut de l'installation."
+    CHECKS_OK=0
+  elif [[ -n "$PREVIOUS_SINK" && "$DEST" != "$PREVIOUS_SINK" ]]; then
+    yellow "  sortie vers $DEST au lieu de $PREVIOUS_SINK"
   else
-    vert "  sortie vers le peripherique physique : $DEST"
+    green "  sortie vers le peripherique physique : $DEST"
   fi
 fi
 
-(( ETAPES_OK )) || jaune "  Des points ci-dessus ont echoue : relance ./install.sh, ou ouvre une issue."
+(( CHECKS_OK )) || yellow "  Des points ci-dessus ont echoue : relance ./install.sh, ou ouvre une issue."
 
 cat <<EOF
 
-$(vert "Installation terminee.")
+$(green "Installation terminee.")
 
-  Profil actif     : $PROFIL_DEFAUT
+  Profil actif     : $DEFAULT_PROFILE
   Changer          : surround-profil <nom>      (sans argument : la liste)
   Mesurer          : python3 $TEST_DIR/analyse_hrir.py
   Generer un test  : cd $TEST_DIR && python3 gen_tests.py
-  Desinstaller     : $PROJET/uninstall.sh
+  Desinstaller     : $PROJECT_DIR/uninstall.sh
 
   Dans un jeu, choisis une sortie 7.1 — jamais un mode « casque » ou « HRTF »,
   qui appliquerait une seconde spatialisation par-dessus celle-ci.
