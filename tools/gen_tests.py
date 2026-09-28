@@ -81,10 +81,10 @@ def write(path, data, peak=0.35):
 
 
 sweep = build_sweep()
-write("test_avant_arriere.wav", sweep)
+write("test_front_back.wav", sweep)
 
 circ, order = build_circle()
-write("test_cercle.wav", circ)
+write("test_circle.wav", circ)
 print("\nOrdre du tour du cercle :")
-for i, (_, nom) in enumerate(order, 1):
-    print(f"  {i}. {nom}")
+for i, (_, name) in enumerate(order, 1):
+    print(f"  {i}. {name}")

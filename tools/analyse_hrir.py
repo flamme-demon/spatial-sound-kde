@@ -7,7 +7,7 @@ from scipy.io import wavfile
 
 HR = os.path.expanduser(
     os.environ.get("XDG_DATA_HOME", "~/.local/share") + "/pipewire/hrir_hesuvi")
-CANDIDATS = ["atmos", "cmss_game", "cmss_ent", "dh+", "dh++", "gsx", "gsx+", "dtshx",
+CANDIDATES = ["atmos", "cmss_game", "cmss_ent", "dh+", "dh++", "gsx", "gsx+", "dtshx",
              "dvs", "sbx33", "sbx67", "ssc_ny", "ssc_dub", "ssc_syd", "EAC_Default",
              "nahimic", "ooyh1", "razer_fix", "sonic", "hear"]
 
@@ -51,8 +51,8 @@ def coloration_db(h, sr):
 
 
 rows = []
-for nom in CANDIDATS:
-    p = f"{HR}/{nom}.wav"
+for name in CANDIDATES:
+    p = f"{HR}/{name}.wav"
     if not os.path.exists(p):
         continue
     sr, raw = wavfile.read(p)
@@ -62,30 +62,30 @@ for nom in CANDIDATS:
     # Un fichier porteur de NaN ou de valeurs hors bornes produirait des mesures
     # « nan » silencieuses. Mieux vaut le nommer : convolue, il enverrait des
     # salves tres fortes dans le casque.
-    brut = d.astype(np.float64)
-    if not np.isfinite(brut).all() or np.abs(brut[np.isfinite(brut)]).max() > 8.0 * (
+    samples = d.astype(np.float64)
+    if not np.isfinite(samples).all() or np.abs(samples[np.isfinite(samples)]).max() > 8.0 * (
         1 if np.issubdtype(d.dtype, np.floating) else np.iinfo(d.dtype).max
     ):
-        print(f"{nom:<14}  FICHIER CORROMPU — valeurs non finies ou hors bornes")
+        print(f"{name:<14}  FICHIER CORROMPU — valeurs non finies ou hors bornes")
         continue
     d = d.astype(float) / 32768
     # canal 6 = FC vers oreille gauche : la source frontale, la plus revelatrice
     fc = d[:, 6]
     ild_rl, ild_rr = lateralisation(d)
-    rows.append((nom, decay_ms(fc, sr), coloration_db(fc, sr), ild_rl, ild_rr))
+    rows.append((name, decay_ms(fc, sr), coloration_db(fc, sr), ild_rl, ild_rr))
 
 # On trie par reverb croissante, mais les profils non lateralisants sont relegues :
 # un profil qui ne place pas la gauche a gauche ne sert a rien, quelle que soit
 # sa reverb ou sa neutralite.
 # En dessous de 3 dB d'ecart interaural, la difference est trop faible pour etre
 # exploitee a l'ecoute : le profil ne place plus les sons, on le relegue en bas.
-SEUIL_LAT = 3.0
-rows.sort(key=lambda r: (min(r[3], r[4]) < SEUIL_LAT, r[1]))
+LAT_THRESHOLD = 3.0
+rows.sort(key=lambda r: (min(r[3], r[4]) < LAT_THRESHOLD, r[1]))
 
 print(f"{'profil':<14}{'reverb':>9}{'coloration':>12}{'lat. G':>9}{'lat. D':>9}   verdict")
 print("-" * 70)
-for nom, dec, col, ild_rl, ild_rr in rows:
-    if min(ild_rl, ild_rr) < SEUIL_LAT:
+for name, dec, col, ild_rl, ild_rr in rows:
+    if min(ild_rl, ild_rr) < LAT_THRESHOLD:
         verdict = "A EVITER (ne lateralise pas)"
     elif dec < 45 and min(ild_rl, ild_rr) > 8:
         verdict = "bon en jeu"
@@ -93,4 +93,4 @@ for nom, dec, col, ild_rl, ild_rr in rows:
         verdict = "salle marquee (cinema)"
     else:
         verdict = "correct"
-    print(f"{nom:<14}{dec:>7.0f}ms{col:>10.1f}dB{ild_rl:>+8.1f}dB{ild_rr:>+8.1f}dB   {verdict}")
+    print(f"{name:<14}{dec:>7.0f}ms{col:>10.1f}dB{ild_rl:>+8.1f}dB{ild_rr:>+8.1f}dB   {verdict}")
