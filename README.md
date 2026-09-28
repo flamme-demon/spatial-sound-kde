@@ -102,6 +102,7 @@ surround-profil              # list, with measurements
 surround-profil cmss_game    # switch (~0.1 s, without cutting other audio)
 surround-profil -a           # every profile present
 surround-profil --data       # TSV output, consumed by the applet
+surround-profil --sync       # compact state, polled by the applet every 500 ms
 ```
 
 Profiles are not equivalent, and **their reputation does not match their contents**.

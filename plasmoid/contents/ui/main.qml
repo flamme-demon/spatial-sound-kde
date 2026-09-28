@@ -21,6 +21,8 @@ PlasmoidItem {
     property int enveloppe: 0
     property bool enveloppeDispo: false
     property string indiceRecherche: ""
+    // Derniere sortie de --sync, reference du polling rapide.
+    property string dernierEtat: ""
 
     // En deca de ce seuil, une recherche renverrait des centaines d'entrees sans
     // interet et lancerait un processus a chaque frappe.
@@ -96,8 +98,8 @@ PlasmoidItem {
                 modeleCasques.append({ nom: c[0] });
             }
         });
-        // Met à jour l'état de référence pour le polling : évite un
-        // rafraîchissement redondant au cycle suivant.
+        // Reference du polling a jour : sans cela, le cycle suivant verrait un
+        // changement et rechargerait tout une seconde fois.
         shell.lancer("--sync", function (sortie) {
             root.dernierEtat = sortie;
         });
@@ -173,22 +175,28 @@ PlasmoidItem {
 
     Component.onCompleted: rafraichir()
 
-    // Polling rapide (500 ms) : --sync renvoie une chaîne compacte
-    // (profil<TAB>enveloppe<TAB>casque) qu'on compare à l'état précédent.
-    // On ne rafraîchit le modèle complet que si quelque chose a changé.
-    property string dernierEtat: ""
-
+    // Un changement fait depuis le terminal doit apparaitre aussitot. --sync
+    // renvoie une ligne compacte (profil, enveloppe, casque) qu'on compare a la
+    // precedente : le modele complet n'est recharge que si elle a change.
     Timer {
         interval: 500; running: true; repeat: true
         onTriggered: {
-            if (root.occupe) return
+            if (root.occupe) return;
             shell.lancer("--sync", function (sortie) {
                 if (sortie !== root.dernierEtat) {
-                    root.dernierEtat = sortie
-                    root.rafraichir()
+                    root.dernierEtat = sortie;
+                    root.rafraichir();
                 }
-            })
+            });
         }
+    }
+
+    // --sync ne voit ni l'etat du sink, ni un profil depose dans le dossier,
+    // ni le generateur installe apres coup : un rechargement complet periodique
+    // reste necessaire pour ceux-la.
+    Timer {
+        interval: 30000; running: true; repeat: true
+        onTriggered: if (!root.occupe) root.rafraichir()
     }
 
     // Icone deposee par install.sh dans le theme hicolor de l'utilisateur.
