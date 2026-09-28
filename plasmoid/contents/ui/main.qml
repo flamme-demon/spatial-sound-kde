@@ -14,126 +14,126 @@ PlasmoidItem {
     // on passe par un shell pour que $HOME soit resolu.
     readonly property string bin: "$HOME/.local/bin/surround-profil"
 
-    property string profilActuel: "…"
-    property bool sinkActif: false
-    property bool occupe: false
-    property string casqueActif: "aucune"
-    property int enveloppe: 0
-    property bool enveloppeDispo: false
-    property string indiceRecherche: ""
+    property string currentProfile: "…"
+    property bool sinkActive: false
+    property bool busy: false
+    property string activeHeadphone: "none"
+    property int envelope: 0
+    property bool envelopeAvailable: false
+    property string searchHint: ""
     // Derniere sortie de --sync, reference du polling rapide.
-    property string dernierEtat: ""
+    property string lastState: ""
 
     // En deca de ce seuil, une recherche renverrait des centaines d'entrees sans
     // interet et lancerait un processus a chaque frappe.
-    readonly property int minCaracteres: 3
+    readonly property int minChars: 3
     // Au-dela, on fait defiler plutot que d'agrandir : la fenetre du plasmoide
     // est deja juste en hauteur.
-    readonly property int maxLignesVisibles: 8
+    readonly property int maxVisibleRows: 8
 
     Plasma5Support.DataSource {
         id: shell
         engine: "executable"
         connectedSources: []
 
-        property var rappels: ({})
+        property var callbacks: ({})
 
-        function lancer(commande, rappel) {
-            const cle = "sh -c " + "'" + bin + " " + commande + "'";
-            rappels[cle] = rappel;
-            connectSource(cle);
+        function run(command, callback) {
+            const key = "sh -c " + "'" + bin + " " + command + "'";
+            callbacks[key] = callback;
+            connectSource(key);
         }
 
         onNewData: (source, data) => {
-            const rappel = rappels[source];
-            delete rappels[source];
+            const callback = callbacks[source];
+            delete callbacks[source];
             disconnectSource(source);
-            if (rappel) {
-                rappel(("" + data["stdout"]).trim(), data["exit code"]);
+            if (callback) {
+                callback(("" + data["stdout"]).trim(), data["exit code"]);
             }
         }
     }
 
-    ListModel { id: modeleProfils }
-    ListModel { id: modeleCasques }
-    ListModel { id: modeleRecherche }
+    ListModel { id: profileModel }
+    ListModel { id: headphoneModel }
+    ListModel { id: searchModel }
 
-    function rafraichir() {
-        shell.lancer("--data", function (sortie) {
-            modeleProfils.clear();
-            for (const ligne of sortie.split("\n")) {
-                if (!ligne) continue;
-                const c = ligne.split("\t");
+    function refresh() {
+        shell.run("--data", function (output) {
+            profileModel.clear();
+            for (const line of output.split("\n")) {
+                if (!line) continue;
+                const c = line.split("\t");
                 if (c.length < 6) continue;
                 // Un profil ajoute par l'utilisateur n'a pas ete mesure :
                 // ses colonnes sont vides et les pastilles restent masquees,
                 // plutot que d'afficher des valeurs inventees.
-                modeleProfils.append({
-                    nom: c[0], usage: c[1],
-                    mesure: c[2] !== "",
+                profileModel.append({
+                    name: c[0], usage: c[1],
+                    measured: c[2] !== "",
                     lat: c[2] === "" ? 0 : parseInt(c[2]),
                     reverb: c[3] === "" ? 0 : parseInt(c[3]),
-                    note: c[4], estActif: c[5] === "1"
+                    note: c[4], isActive: c[5] === "1"
                 });
-                if (c[5] === "1") root.profilActuel = c[0];
+                if (c[5] === "1") root.currentProfile = c[0];
             }
         });
-        shell.lancer("--status", function (sortie, code) {
-            root.sinkActif = (code === 0);
+        shell.run("--status", function (output, code) {
+            root.sinkActive = (code === 0);
         });
-        shell.lancer("--enveloppe-dispo", function (sortie) {
-            root.enveloppeDispo = (sortie.trim() === "1");
+        shell.run("--envelope-available", function (output) {
+            root.envelopeAvailable = (output.trim() === "1");
         });
-        shell.lancer("--enveloppe-actuelle", function (sortie) {
-            const v = parseInt(sortie.trim());
-            if (!isNaN(v)) root.enveloppe = v;
+        shell.run("--envelope-current", function (output) {
+            const v = parseInt(output.trim());
+            if (!isNaN(v)) root.envelope = v;
         });
-        shell.lancer("--casque-data", function (sortie) {
-            modeleCasques.clear();
-            for (const ligne of sortie.split("\n")) {
-                if (!ligne) continue;
-                const c = ligne.split("\t");
+        shell.run("--headphone-data", function (output) {
+            headphoneModel.clear();
+            for (const line of output.split("\n")) {
+                if (!line) continue;
+                const c = line.split("\t");
                 if (c.length < 2) continue;
-                if (c[1] === "1") root.casqueActif = c[0];
-                modeleCasques.append({ nom: c[0] });
+                if (c[1] === "1") root.activeHeadphone = c[0];
+                headphoneModel.append({ name: c[0] });
             }
         });
         // Reference du polling a jour : sans cela, le cycle suivant verrait un
         // changement et rechargerait tout une seconde fois.
-        shell.lancer("--sync", function (sortie) {
-            root.dernierEtat = sortie;
+        shell.run("--sync", function (output) {
+            root.lastState = output;
         });
     }
 
     // Champ vide : on montre ce qui est deja telecharge. Des qu'on tape, on
     // interroge l'index complet des 8850 casques mesures. Un seul champ couvre
     // donc les deux usages, sans occuper de hauteur supplementaire.
-    function rechercherCasques(motif) {
-        if (motif.indexOf('"') >= 0 || motif.indexOf("'") >= 0) return;
-        if (motif.length > 0 && motif.length < minCaracteres) {
-            modeleRecherche.clear();
-            root.indiceRecherche = i18np("Type at least %1 character",
-                                         "Type at least %1 characters", minCaracteres);
+    function searchHeadphones(pattern) {
+        if (pattern.indexOf('"') >= 0 || pattern.indexOf("'") >= 0) return;
+        if (pattern.length > 0 && pattern.length < minChars) {
+            searchModel.clear();
+            root.searchHint = i18np("Type at least %1 character",
+                                    "Type at least %1 characters", minChars);
             return;
         }
-        root.indiceRecherche = "";
-        if (motif.length === 0) {
-            modeleRecherche.clear();
-            for (let i = 0; i < modeleCasques.count; i++) {
-                modeleRecherche.append({
-                    nom: modeleCasques.get(i).nom, source: "", installe: true
+        root.searchHint = "";
+        if (pattern.length === 0) {
+            searchModel.clear();
+            for (let i = 0; i < headphoneModel.count; i++) {
+                searchModel.append({
+                    name: headphoneModel.get(i).name, source: "", installed: true
                 });
             }
             return;
         }
-        shell.lancer('--casque-chercher-data "' + motif + '"', function (sortie) {
-            modeleRecherche.clear();
-            for (const ligne of sortie.split("\n")) {
-                if (!ligne) continue;
-                const c = ligne.split("\t");
+        shell.run('--headphone-search-data "' + pattern + '"', function (output) {
+            searchModel.clear();
+            for (const line of output.split("\n")) {
+                if (!line) continue;
+                const c = line.split("\t");
                 if (c.length < 3) continue;
-                modeleRecherche.append({
-                    nom: c[0], source: c[1], installe: c[2] === "1"
+                searchModel.append({
+                    name: c[0], source: c[1], installed: c[2] === "1"
                 });
             }
         });
@@ -141,39 +141,39 @@ PlasmoidItem {
 
     // Applique a la relache seulement : chaque valeur regenere le profil et
     // recharge la chaine, ce qui serait absurde a chaque pixel du curseur.
-    function reglerEnveloppe(v) {
-        if (occupe) return;
-        occupe = true;
-        shell.lancer("--enveloppe " + Math.round(v), function () {
-            occupe = false;
-            rafraichir();
+    function setEnvelope(v) {
+        if (busy) return;
+        busy = true;
+        shell.run("--envelope " + Math.round(v), function () {
+            busy = false;
+            refresh();
         });
     }
 
-    function basculerCasque(nom) {
-        if (occupe) return;
+    function switchHeadphone(name) {
+        if (busy) return;
         // Un nom porteur de guillemets casserait la commande passee au shell.
-        if (nom.indexOf('"') >= 0 || nom.indexOf("'") >= 0) return;
-        occupe = true;
-        const cmd = (nom === "aucune") ? "--casque-aucune" : '--casque "' + nom + '"';
-        shell.lancer(cmd, function () {
-            occupe = false;
-            rafraichir();
+        if (name.indexOf('"') >= 0 || name.indexOf("'") >= 0) return;
+        busy = true;
+        const cmd = (name === "none") ? "--headphone-none" : '--headphone "' + name + '"';
+        shell.run(cmd, function () {
+            busy = false;
+            refresh();
         });
     }
 
-    function basculer(nom) {
-        if (occupe || nom === profilActuel) return;
-        occupe = true;
+    function switchProfile(name) {
+        if (busy || name === currentProfile) return;
+        busy = true;
         // Le changement ne recharge que l'instance dediee : ~0.15 s, sans
         // toucher au serveur audio principal ni aux autres flux.
-        shell.lancer(nom, function () {
-            occupe = false;
-            rafraichir();
+        shell.run(name, function () {
+            busy = false;
+            refresh();
         });
     }
 
-    Component.onCompleted: rafraichir()
+    Component.onCompleted: refresh()
 
     // Un changement fait depuis le terminal doit apparaitre aussitot. --sync
     // renvoie une ligne compacte (profil, enveloppe, casque) qu'on compare a la
@@ -181,11 +181,11 @@ PlasmoidItem {
     Timer {
         interval: 500; running: true; repeat: true
         onTriggered: {
-            if (root.occupe) return;
-            shell.lancer("--sync", function (sortie) {
-                if (sortie !== root.dernierEtat) {
-                    root.dernierEtat = sortie;
-                    root.rafraichir();
+            if (root.busy) return;
+            shell.run("--sync", function (output) {
+                if (output !== root.lastState) {
+                    root.lastState = output;
+                    root.refresh();
                 }
             });
         }
@@ -196,27 +196,27 @@ PlasmoidItem {
     // reste necessaire pour ceux-la.
     Timer {
         interval: 30000; running: true; repeat: true
-        onTriggered: if (!root.occupe) root.rafraichir()
+        onTriggered: if (!root.busy) root.refresh()
     }
 
     // Icone deposee par install.sh dans le theme hicolor de l'utilisateur.
     // On la designe par son NOM, pas par un chemin : c'est ce qu'attendent le
     // navigateur de widgets et le moteur d'icones, et c'est ce qui declenche
     // la recoloration selon le theme clair ou sombre.
-    readonly property string icone: "org.spatialsound.kde"
-    Plasmoid.icon: icone
+    readonly property string appIcon: "org.spatialsound.kde"
+    Plasmoid.icon: appIcon
     toolTipMainText: i18n("Spatial Sound")
-    toolTipSubText: sinkActif
-        ? i18n("Profile: %1", profilActuel)
+    toolTipSubText: sinkActive
+        ? i18n("Profile: %1", currentProfile)
         : i18n("Virtual sink inactive")
 
     compactRepresentation: MouseArea {
         onClicked: root.expanded = !root.expanded
         Kirigami.Icon {
             anchors.fill: parent
-            source: root.icone
+            source: root.appIcon
             isMask: true          // teinte par la couleur de texte du panneau
-            opacity: root.sinkActif ? 1.0 : 0.5
+            opacity: root.sinkActive ? 1.0 : 0.5
         }
     }
 
@@ -239,12 +239,12 @@ PlasmoidItem {
                     spacing: 0
                     PlasmaExtras.Heading {
                         level: 4
-                        text: root.sinkActif ? root.profilActuel : i18n("Inactive")
+                        text: root.sinkActive ? root.currentProfile : i18n("Inactive")
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
                     PlasmaComponents.Label {
-                        text: root.sinkActif
+                        text: root.sinkActive
                             ? i18n("7.1 headphone surround")
                             : i18n("Run install.sh")
                         font: Kirigami.Theme.smallFont
@@ -254,7 +254,7 @@ PlasmoidItem {
                     }
                 }
                 PlasmaComponents.BusyIndicator {
-                    running: root.occupe
+                    running: root.busy
                     visible: running
                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
@@ -290,69 +290,69 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.TextField {
-                        id: champCasque
+                        id: headphoneField
                         Layout.fillWidth: true
-                        enabled: !root.occupe
+                        enabled: !root.busy
                         // La correction active s'affiche en texte plein, pas en
                         // texte de substitution : celui-ci est gris pale et se lit
                         // comme un champ vide, ce qui masquait l'etat courant.
                         placeholderText: i18n("search a headphone…")
 
-                        function refleterEtat() {
-                            text = root.casqueActif === "aucune" ? "" : root.casqueActif;
+                        function reflectState() {
+                            text = root.activeHeadphone === "none" ? "" : root.activeHeadphone;
                         }
-                        Component.onCompleted: refleterEtat()
+                        Component.onCompleted: reflectState()
                         Connections {
                             target: root
-                            function onCasqueActifChanged() {
-                                if (!champCasque.activeFocus) champCasque.refleterEtat();
+                            function onActiveHeadphoneChanged() {
+                                if (!headphoneField.activeFocus) headphoneField.reflectState();
                             }
                         }
 
                         // La recherche part sur pause de frappe : sans cela chaque
                         // caractere lancerait un processus.
                         Timer {
-                            id: attente
+                            id: searchDelay
                             interval: 250
-                            onTriggered: root.rechercherCasques(champCasque.text)
+                            onTriggered: root.searchHeadphones(headphoneField.text)
                         }
-                        onTextChanged: attente.restart()
+                        onTextChanged: searchDelay.restart()
                         onActiveFocusChanged: {
                             if (activeFocus) {
                                 // Le nom affiche est selectionne : taper le remplace
                                 // au lieu de s'y ajouter.
                                 selectAll();
-                                root.rechercherCasques("");
-                                listeCasques.open();
+                                root.searchHeadphones("");
+                                headphonePopup.open();
                             } else {
-                                refleterEtat();
+                                reflectState();
                             }
                         }
 
                         QQC.Popup {
-                            id: listeCasques
+                            id: headphonePopup
                             y: -height - Kirigami.Units.smallSpacing
-                            width: champCasque.width
+                            width: headphoneField.width
                             // Les resultats flottent au-dessus du champ : ils ne
                             // prennent aucune hauteur dans la mise en page, qui est
                             // deja juste.
-                            readonly property real hauteurLigne:
-                                Math.max(1, vueCasques.count) > 0 && vueCasques.contentHeight > 0
-                                    ? vueCasques.contentHeight / Math.max(1, vueCasques.count)
+                            readonly property real rowHeight:
+                                Math.max(1, headphoneView.count) > 0 && headphoneView.contentHeight > 0
+                                    ? headphoneView.contentHeight / Math.max(1, headphoneView.count)
                                     : Kirigami.Units.gridUnit * 2
-                            height: root.indiceRecherche !== ""
+                            height: root.searchHint !== ""
                                 ? Kirigami.Units.gridUnit * 2
-                                : Math.min(hauteurLigne * root.maxLignesVisibles,
-                                           vueCasques.contentHeight) + 2
+                                : Math.min(rowHeight * root.maxVisibleRows,
+                                           headphoneView.contentHeight) + 2
                             padding: 1
-                            visible: champCasque.activeFocus
-                                     && (modeleRecherche.count > 0 || root.indiceRecherche !== "")
+                            visible: headphoneField.activeFocus
+                                     && (searchModel.count > 0 || root.searchHint !== "")
 
                             PlasmaComponents.Label {
                                 anchors.centerIn: parent
                                 width: parent.width - Kirigami.Units.largeSpacing
-                                visible: root.indiceRecherche !== ""
-                                text: root.indiceRecherche
+                                visible: root.searchHint !== ""
+                                text: root.searchHint
                                 font: Kirigami.Theme.smallFont
                                 opacity: 0.7
                                 horizontalAlignment: Text.AlignHCenter
@@ -360,10 +360,10 @@ PlasmoidItem {
                             }
 
                             contentItem: ListView {
-                                id: vueCasques
+                                id: headphoneView
                                 clip: true
-                                visible: root.indiceRecherche === ""
-                                model: modeleRecherche
+                                visible: root.searchHint === ""
+                                model: searchModel
                                 boundsBehavior: Flickable.StopAtBounds
                                 QQC.ScrollBar.vertical: QQC.ScrollBar {
                                     policy: QQC.ScrollBar.AsNeeded
@@ -371,15 +371,16 @@ PlasmoidItem {
                                 delegate: PlasmaComponents.ItemDelegate {
                                     width: ListView.view.width
                                     onClicked: {
-                                        root.basculerCasque(model.nom);
+                                        root.switchHeadphone(model.name);
                                         // Pas de vidage : la perte du focus remet
                                         // le champ sur la correction desormais active.
-                                        champCasque.focus = false;
+                                        headphoneField.focus = false;
                                     }
                                     contentItem: RowLayout {
                                         spacing: Kirigami.Units.smallSpacing
                                         PlasmaComponents.Label {
-                                            text: model.nom
+                                            // « none » est une valeur interne : on affiche son libelle traduit.
+                                            text: model.name === "none" ? i18n("None") : model.name
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
@@ -394,7 +395,7 @@ PlasmoidItem {
                                         // « + » signale un filtre a telecharger,
                                         // la coche un filtre deja present.
                                         Kirigami.Icon {
-                                            source: model.installe ? "checkmark" : "list-add"
+                                            source: model.installed ? "checkmark" : "list-add"
                                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                         }
@@ -405,11 +406,11 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.ToolButton {
-                        id: boutonEffacer
+                        id: clearButton
                         icon.name: "edit-clear"
-                        enabled: !root.occupe && root.casqueActif !== "aucune"
+                        enabled: !root.busy && root.activeHeadphone !== "none"
                         display: PlasmaComponents.AbstractButton.IconOnly
-                        onClicked: root.basculerCasque("aucune")
+                        onClicked: root.switchHeadphone("none")
                         PlasmaComponents.ToolTip.text: i18n("Remove the correction")
                         PlasmaComponents.ToolTip.visible: hovered
                         PlasmaComponents.ToolTip.delay: 700
@@ -422,7 +423,7 @@ PlasmoidItem {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    visible: root.enveloppeDispo
+                    visible: root.envelopeAvailable
 
                     PlasmaComponents.Label {
                         text: i18n("Damping:")
@@ -430,17 +431,17 @@ PlasmoidItem {
                         opacity: 0.8
                     }
                     PlasmaComponents.Slider {
-                        id: curseurEnv
+                        id: envelopeSlider
                         Layout.fillWidth: true
                         from: 0
                         to: 100
                         stepSize: 5
-                        enabled: !root.occupe
-                        value: root.enveloppe
-                        onPressedChanged: if (!pressed) root.reglerEnveloppe(value)
+                        enabled: !root.busy
+                        value: root.envelope
+                        onPressedChanged: if (!pressed) root.setEnvelope(value)
                     }
                     PlasmaComponents.Label {
-                        text: i18n("%1 %", Math.round(curseurEnv.value))
+                        text: i18n("%1 %", Math.round(envelopeSlider.value))
                         font: Kirigami.Theme.smallFont
                         opacity: 0.7
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 2
@@ -452,38 +453,38 @@ PlasmoidItem {
 
         contentItem: PlasmaComponents.ScrollView {
             ListView {
-                model: modeleProfils
+                model: profileModel
                 clip: true
                 currentIndex: -1
 
                 section.property: "usage"
                 section.delegate: Kirigami.ListSectionHeader {
                     width: ListView.view.width
-                    text: section === "jeu"    ? i18n("Gaming — dry and precise")
+                    text: section === "game"   ? i18n("Gaming — dry and precise")
                         : section === "film"   ? i18n("Film — spacious")
-                        : section === "perso"  ? i18n("Yours — not measured")
+                        : section === "custom" ? i18n("Yours — not measured")
                         :                        i18n("Avoid")
                 }
 
                 delegate: PlasmaComponents.ItemDelegate {
                     width: ListView.view.width
-                    enabled: !root.occupe
-                    highlighted: model.estActif
-                    onClicked: root.basculer(model.nom)
+                    enabled: !root.busy
+                    highlighted: model.isActive
+                    onClicked: root.switchProfile(model.name)
 
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.smallSpacing
 
                         Kirigami.Icon {
-                            source: model.estActif ? "checkmark" : ""
-                            visible: model.estActif
+                            source: model.isActive ? "checkmark" : ""
+                            visible: model.isActive
                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
                         }
 
                         PlasmaComponents.Label {
-                            text: model.nom
-                            font.bold: model.estActif
+                            text: model.name
+                            font.bold: model.isActive
                             elide: Text.ElideRight
                         }
 
@@ -502,7 +503,7 @@ PlasmoidItem {
                         // La lateralisation est le critere decisif : on la met en avant,
                         // en rouge quand elle est trop faible pour placer quoi que ce soit.
                         PlasmaComponents.Label {
-                            visible: model.mesure
+                            visible: model.measured
                             text: i18n("+%1 dB", model.lat)
                             font: Kirigami.Theme.smallFont
                             color: model.lat < 3 ? Kirigami.Theme.negativeTextColor
@@ -510,7 +511,7 @@ PlasmoidItem {
                                  : Kirigami.Theme.textColor
                         }
                         PlasmaComponents.Label {
-                            visible: model.mesure
+                            visible: model.measured
                             text: i18n("%1 ms", model.reverb)
                             font: Kirigami.Theme.smallFont
                             opacity: 0.6

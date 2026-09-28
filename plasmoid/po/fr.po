@@ -94,6 +94,10 @@ msgstr "%1 %"
 msgid "Remove the correction"
 msgstr "Retirer la correction"
 
+#: contents/ui/main.qml
+msgid "None"
+msgstr "Aucune"
+
 # Commentaires de profils. Ils arrivent depuis surround-profil --data en anglais :
 # xgettext ne peut pas les extraire, ils sont donc listes a la main.
 msgid "best overall compromise"

@@ -6,7 +6,7 @@ set -euo pipefail
 # des la premiere correspondance, le producteur meurt de SIGPIPE, et pipefail
 # propage cet echec — le test echoue donc precisement quand il trouve. On
 # capture la sortie avant de la tester.
-contient() { [[ "$1" == *"$2"* ]]; }
+contains() { [[ "$1" == *"$2"* ]]; }
 
 HR="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hrir_hesuvi"
 HP="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/hpcf"
@@ -26,10 +26,10 @@ AUTOEQ="https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results"
 # Les commentaires sont stockes en anglais : c'est la forme canonique qui sert de
 # cle de traduction, aussi bien pour l'applet Plasma que pour l'affichage ci-dessous.
 declare -A INFO=(
-  [cmss_game]="jeu|15|39|best overall compromise"
-  [sonic]="jeu|11|16|very dry"
-  [EAC_Default]="jeu|9|3|driest of all (44.1 kHz)"
-  [dtshx]="jeu|6|18|dry, less contrasted"
+  [cmss_game]="game|15|39|best overall compromise"
+  [sonic]="game|11|16|very dry"
+  [EAC_Default]="game|9|3|driest of all (44.1 kHz)"
+  [dtshx]="game|6|18|dry, less contrasted"
   [atmos]="film|12|46|spacious, slightly distant"
   [ssc_ny]="film|9|42|Spatial Sound Card, New York"
   [ssc_syd]="film|14|99|Spatial Sound Card, Sydney"
@@ -41,7 +41,7 @@ declare -A INFO=(
 # Spatial Sound Card propose six lieux : Paris, Dubai, Shanghai, Sydney,
 # Reykjavik et New York. HeSuVi n'en a capture que quatre. « hù » est
 # l'abreviation chinoise de Shanghai (沪), d'ou le nom de fichier.
-ORDRE=(cmss_game sonic EAC_Default dtshx atmos ssc_ny ssc_hù ssc_syd ssc_dub gsx dh+)
+ORDER=(cmss_game sonic EAC_Default dtshx atmos ssc_ny ssc_hù ssc_syd ssc_dub gsx dh+)
 
 # Traduction de l'affichage terminal. --data reste en anglais : c'est une interface
 # machine, consommee par l'applet qui applique son propre catalogue.
@@ -54,8 +54,10 @@ declare -A FR=(
   ["Sennheiser GSX, coloured"]="Sennheiser GSX, colore"
   ["Dolby Headphone, distant"]="Dolby Headphone, lointain"
   ["does not lateralise"]="ne lateralise pas"
+  ["game"]="jeu"
+  ["none"]="aucune"
 )
-traduire() {
+translate() {
   if [[ "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" == fr* && -n "${FR[$1]+x}" ]]; then
     echo "${FR[$1]}"
   else
@@ -68,9 +70,28 @@ traduire() {
 # Le profil de base est memorise a part : quand une enveloppe est appliquee,
 # hrir.wav pointe sur un fichier derive, pas sur le profil choisi.
 BASE_F="$HR/.base"
-ENV_F="$HR/.enveloppe"
-DERIVE="$HR/.derive.wav"
+ENV_F="$HR/.envelope"
+DERIVED="$HR/.derived.wav"
 GEN="$(command -v spatial-sound-gen 2>/dev/null || echo "$HOME/.local/bin/spatial-sound-gen")"
+
+# Installations d'avant la 1.1 : l'etat portait des noms francais. On le renomme
+# une fois, en reorientant les liens qui y pointaient, pour que le reglage et la
+# correction active survivent a la mise a jour.
+migrate_legacy_state() {
+  [[ -f "$HR/.enveloppe" && ! -f "$ENV_F" ]] && mv "$HR/.enveloppe" "$ENV_F"
+  if [[ -f "$HR/.derive.wav" && ! -f "$DERIVED" ]]; then
+    mv "$HR/.derive.wav" "$DERIVED"
+    [[ "$(readlink "$HR/hrir.wav" 2>/dev/null)" == "$HR/.derive.wav" ]] \
+      && ln -sfn "$DERIVED" "$HR/hrir.wav"
+  fi
+  if [[ -f "$HP/aucune.wav" && ! -f "$HP/none.wav" ]]; then
+    mv "$HP/aucune.wav" "$HP/none.wav"
+    [[ "$(readlink "$HP/hpcf.wav" 2>/dev/null)" == "$HP/aucune.wav" ]] \
+      && ln -sfn "$HP/none.wav" "$HP/hpcf.wav"
+  fi
+  return 0
+}
+migrate_legacy_state
 
 # printf compte les octets, pas les caracteres : « ssc_hù » occupe 7 octets pour
 # 6 signes, ce qui decalait sa ligne. On complete donc a la main, en mesurant la
@@ -82,43 +103,43 @@ pad() {
   while (( n < l )); do printf ' '; ((n++)); done
 }
 
-actuel() {
+current_profile() {
   if [[ -f "$BASE_F" ]]; then cat "$BASE_F"
-  else basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo aucun)" .wav; fi
+  else basename "$(readlink -f "$HR/hrir.wav" 2>/dev/null || echo none)" .wav; fi
 }
-enveloppe_actuelle() { [[ -f "$ENV_F" ]] && cat "$ENV_F" || echo 0; }
+current_envelope() { [[ -f "$ENV_F" ]] && cat "$ENV_F" || echo 0; }
 
 # 0 laisse le profil intact ; 100 asseche au maximum. L'echelle est geometrique
 # parce que l'oreille percoit les durees de reverberation en proportion, pas en
 # ecart absolu : de 300 a 10 ms en progression constante.
-tau_pour() {
+tau_for() {
   awk -v v="$1" 'BEGIN{ printf "%.1f", 300 * exp(log(10.0/300.0) * v/100.0) }'
 }
 
 # Reconstruit hrir.wav a partir du profil de base et de l'enveloppe courante.
-appliquer() {
+rebuild_hrir() {
   local base env
-  base="$(actuel)"; env="$(enveloppe_actuelle)"
+  base="$(current_profile)"; env="$(current_envelope)"
   [[ -f "$HR/$base.wav" ]] || { echo "profil de base introuvable : $base" >&2; exit 1; }
   if [[ "$env" -le 0 ]] 2>/dev/null || [[ ! -x "$GEN" ]]; then
     ln -sfn "$HR/$base.wav" "$HR/hrir.wav"
   else
-    "$GEN" --source "$HR/$base.wav" --enveloppe "$(tau_pour "$env")" \
-           --sortie "$DERIVE" >/dev/null 2>&1 \
-      && ln -sfn "$DERIVE" "$HR/hrir.wav" \
+    "$GEN" --source "$HR/$base.wav" --envelope "$(tau_for "$env")" \
+           --output "$DERIVED" >/dev/null 2>&1 \
+      && ln -sfn "$DERIVED" "$HR/hrir.wav" \
       || ln -sfn "$HR/$base.wav" "$HR/hrir.wav"
   fi
 }
-casque_actif() { basename "$(readlink -f "$HP/hpcf.wav" 2>/dev/null || echo aucune)" .wav; }
+current_headphone() { basename "$(readlink -f "$HP/hpcf.wav" 2>/dev/null || echo none)" .wav; }
 
 # Recharge la chaine. Seule l'instance dediee redemarre : le serveur audio
 # principal n'est pas touche, donc les autres flux ne sont pas coupes.
 # Repli sur le redemarrage complet pour les installations d'avant le service.
-recharger() {
+reload_chain() {
   if [[ -f "$HOME/.config/systemd/user/spatial-sound.service" ]]; then
     systemctl --user restart spatial-sound.service
     for _ in $(seq 40); do
-      contient "$(pactl list sinks short 2>/dev/null || true)" "$SINK" && break
+      contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK" && break
       sleep 0.05
     done
   else
@@ -129,31 +150,31 @@ recharger() {
 
 # Nom de casque -> chemin AutoEQ. L'index ne stocke que nom/categorie/source,
 # le chemin se reconstruisant a partir des trois.
-url_hpcf() {
+hpcf_path() {
   awk -F'\t' -v n="$1" 'BEGIN{IGNORECASE=1}
     !/^#/ && tolower($1)==tolower(n) { print $3 "/" $2 "/" $1 "/" $1 " minimum phase 48000Hz.wav"; exit }' \
     "$HP/index.tsv"
 }
 
-chercher_casque() {
+search_headphone() {
   [[ -f "$HP/index.tsv" ]] || { echo "index absent — relance install.sh" >&2; exit 1; }
   awk -F'\t' -v m="$1" '!/^#/ && tolower($0) ~ tolower(m) { printf "  %-52s %s (%s)\n", $1, $3, $2 }' \
     "$HP/index.tsv"
 }
 
-installer_casque() {
-  local nom="$1" chemin dest
-  chemin="$(url_hpcf "$nom")"
-  if [[ -z "$chemin" ]]; then
-    echo "Casque introuvable : « $nom »" >&2
-    echo "Cherche le nom exact avec : surround-profil --casque-chercher <motif>" >&2
+install_headphone() {
+  local name="$1" path dest
+  path="$(hpcf_path "$name")"
+  if [[ -z "$path" ]]; then
+    echo "Casque introuvable : « $name »" >&2
+    echo "Cherche le nom exact avec : surround-profil --headphone-search <motif>" >&2
     exit 1
   fi
-  dest="$HP/$nom.wav"
+  dest="$HP/$name.wav"
   if [[ ! -f "$dest" ]]; then
-    echo "Telechargement de la correction pour « $nom »..."
+    echo "Telechargement de la correction pour « $name »..."
     curl -fsSL --max-time 60 -o "$dest.part" \
-      "$AUTOEQ/$(printf '%s' "$chemin" | sed 's/ /%20/g')" \
+      "$AUTOEQ/$(printf '%s' "$path" | sed 's/ /%20/g')" \
       || { rm -f "$dest.part"; echo "telechargement impossible." >&2; exit 1; }
     mv "$dest.part" "$dest"
   fi
@@ -170,8 +191,8 @@ installer_casque() {
       || { rm -f "$dest"; echo "format inattendu ($ch canaux, $sr Hz) : 2 canaux / 48000 Hz requis." >&2; exit 1; }
   fi
   ln -sfn "$dest" "$HP/hpcf.wav"
-  recharger
-  printf 'Correction active : \033[1m%s\033[0m\n' "$nom"
+  reload_chain
+  printf 'Correction active : \033[1m%s\033[0m\n' "$name"
   echo "Attention : une correction ne vaut que pour le modele mesure."
 }
 
@@ -181,9 +202,9 @@ installer_casque() {
 # figure pas a ete ajoute par l'utilisateur — genere par spatial-sound-gen,
 # produit par ASH Toolset, ou simplement depose. Ces profils-la sont listes
 # a part, sans mesures, puisqu'on ne les a pas evalues.
-donnees() {
-  local cur; cur="$(actuel)"
-  for k in "${ORDRE[@]}"; do
+profile_data() {
+  local cur; cur="$(current_profile)"
+  for k in "${ORDER[@]}"; do
     [[ -f "$HR/$k.wav" ]] || continue
     IFS='|' read -r usage lat rev note <<<"${INFO[$k]}"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$k" "$usage" "$lat" "$rev" "$note" \
@@ -195,20 +216,20 @@ donnees() {
     [[ "$n" == hrir ]] && continue
     [[ -n "${INFO[$n]+x}" ]] && continue
     [[ -f "$HR/.hesuvi" ]] && grep -qxF "$n" "$HR/.hesuvi" && continue
-    printf '%s\tperso\t\t\t%s\t%s\n' "$n" "added by you" \
+    printf '%s\tcustom\t\t\t%s\t%s\n' "$n" "added by you" \
       "$([[ "$n" == "$cur" ]] && echo 1 || echo 0)"
   done
 }
 
 # Corrections deja telechargees, consommees par l'applet : il ne propose que ce
-# qui est installe, l'ajout d'un nouveau casque passant par --casque.
-casques_installes() {
-  local cur; cur="$(casque_actif)"
-  printf 'aucune\t%s\n' "$([[ "$cur" == aucune ]] && echo 1 || echo 0)"
+# qui est installe, l'ajout d'un nouveau casque passant par --headphone.
+installed_headphones() {
+  local cur; cur="$(current_headphone)"
+  printf 'none\t%s\n' "$([[ "$cur" == none ]] && echo 1 || echo 0)"
   for f in "$HP"/*.wav; do
     [[ -e "$f" ]] || continue
     local n; n="$(basename "$f" .wav)"
-    [[ "$n" == aucune || "$n" == hpcf ]] && continue
+    [[ "$n" == none || "$n" == hpcf ]] && continue
     printf '%s\t%s\n' "$n" "$([[ "$n" == "$cur" ]] && echo 1 || echo 0)"
   done
 }
@@ -216,15 +237,15 @@ casques_installes() {
 # Recherche destinee a l'applet : nom, source, et si le filtre est deja
 # telecharge. Le nombre de resultats est borne pour rester fluide au clavier,
 # l'index comptant pres de 9000 entrees.
-chercher_data() {
+search_headphone_data() {
   [[ -f "$HP/index.tsv" ]] || return 0
   # La liste des filtres deja telecharges est passee en premier fichier a awk :
   # tester chaque resultat avec system("test -f") lancait un processus par ligne,
   # soit 149 ms pour 100 resultats — bien trop pour une recherche au clavier.
   awk -F'\t' -v m="$1" -v max=500 '
-    NR == FNR { installe[$0] = 1; next }
+    NR == FNR { installed[$0] = 1; next }
     !/^#/ && tolower($1) ~ tolower(m) {
-      printf "%s\t%s\t%s\n", $1, $3, ($1 in installe) ? 1 : 0
+      printf "%s\t%s\t%s\n", $1, $3, ($1 in installed) ? 1 : 0
       if (++n >= max) exit
     }' <(cd "$HP" 2>/dev/null && ls -1 *.wav 2>/dev/null | sed 's/\.wav$//') \
        "$HP/index.tsv"
@@ -232,14 +253,15 @@ chercher_data() {
 
 usage_txt() {
   printf 'Usage : surround-profil [<profil>|-l|-a|--status]\n'
-  printf '        surround-profil --casque <nom> | --casque-chercher <motif> | --casque-aucune\n\n'
+  printf '        surround-profil --headphone <nom> | --headphone-search <motif> | --headphone-none\n'
+  printf '        surround-profil --envelope <0-100>\n\n'
   printf 'Profil : \033[1m%s\033[0m   Correction de casque : \033[1m%s\033[0m\n\n' \
-    "$(actuel)" "$(casque_actif)"
+    "$(current_profile)" "$(translate "$(current_headphone)")"
   printf '  %-13s %-7s %6s %8s  %s\n' profil usage lat. reverb commentaire
-  for k in "${ORDRE[@]}"; do
+  for k in "${ORDER[@]}"; do
     [[ -f "$HR/$k.wav" ]] || continue
     IFS='|' read -r us lat rev note <<<"${INFO[$k]}"
-    printf '  %s %-7s %5sdB %6sms  %s\n' "$(pad "$k" 13)" "$us" "+$lat" "$rev" "$(traduire "$note")"
+    printf '  %s %-7s %5sdB %6sms  %s\n' "$(pad "$k" 13)" "$(translate "$us")" "+$lat" "$rev" "$(translate "$note")"
   done
   printf '\nlat. = capacite a placer les sons dans l espace ; sous 3 dB, inexploitable.\n'
   printf '  -a  les %s profils installes\n' \
@@ -247,34 +269,44 @@ usage_txt() {
   printf '\nLa correction de casque est une couche distincte : elle compense la reponse\n'
   printf 'de TON modele de casque, elle ne place aucun son. Elle ne vaut que pour le\n'
   printf 'modele mesure — en appliquer une prevue pour un autre degrade le rendu.\n'
-  printf '  --casque-chercher hyperx     cherche parmi %s casques mesures\n' \
+  printf '  --headphone-search hyperx   cherche parmi %s casques mesures\n' \
     "$(grep -vc '^#' "$HP/index.tsv" 2>/dev/null || echo 0)"
 }
 
+# Les options francaises d'avant la 1.1 restent acceptees, pour ne casser ni les
+# habitudes ni les scripts de ceux qui les utilisent.
 case "${1-}" in
   ''|-h|--help|-l) usage_txt; exit 0 ;;
-  --current)       actuel; exit 0 ;;
-  --data)          donnees; exit 0 ;;
-  --casque)             installer_casque "${2:?nom de casque attendu}"; exit 0 ;;
-  --casque-aucune)      ln -sfn "$HP/aucune.wav" "$HP/hpcf.wav"; recharger
-                        echo "Correction desactivee."; exit 0 ;;
-  --casque-actuel)      casque_actif; exit 0 ;;
-  --casque-chercher)    chercher_casque "${2:?motif attendu}"; exit 0 ;;
-  --casque-data)        casques_installes; exit 0 ;;
-  --casque-chercher-data) chercher_data "${2-}"; exit 0 ;;
-  --enveloppe)
+  --current)       current_profile; exit 0 ;;
+  --data)          profile_data; exit 0 ;;
+  --headphone|--casque)
+                   install_headphone "${2:?nom de casque attendu}"; exit 0 ;;
+  --headphone-none|--casque-aucune)
+                   ln -sfn "$HP/none.wav" "$HP/hpcf.wav"; reload_chain
+                   echo "Correction desactivee."; exit 0 ;;
+  --headphone-current|--casque-actuel)
+                   current_headphone; exit 0 ;;
+  --headphone-search|--casque-chercher)
+                   search_headphone "${2:?motif attendu}"; exit 0 ;;
+  --headphone-data|--casque-data)
+                   installed_headphones; exit 0 ;;
+  --headphone-search-data|--casque-chercher-data)
+                   search_headphone_data "${2-}"; exit 0 ;;
+  --envelope|--enveloppe)
       [[ -x "$GEN" ]] || { echo "spatial-sound-gen absent : relance install.sh avec cargo installe." >&2; exit 1; }
       v="${2:?valeur 0-100 attendue}"
       (( v >= 0 && v <= 100 )) || { echo "valeur hors bornes (0-100)." >&2; exit 1; }
-      echo "$v" > "$ENV_F"; appliquer; recharger
-      printf 'Enveloppe : %s%%  (constante %s ms)\n' "$v" "$(tau_pour "$v")"
+      echo "$v" > "$ENV_F"; rebuild_hrir; reload_chain
+      printf 'Enveloppe : %s%%  (constante %s ms)\n' "$v" "$(tau_for "$v")"
       exit 0 ;;
-  --enveloppe-actuelle) enveloppe_actuelle; exit 0 ;;
-  --enveloppe-dispo)    [[ -x "$GEN" ]] && echo 1 || echo 0; exit 0 ;;
-  --status)        contient "$(pactl list sinks short 2>/dev/null || true)" "$SINK" \
+  --envelope-current|--enveloppe-actuelle)
+                   current_envelope; exit 0 ;;
+  --envelope-available|--enveloppe-dispo)
+                   [[ -x "$GEN" ]] && echo 1 || echo 0; exit 0 ;;
+  --status)        contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
   --sync)          # Etat compact pour le polling de l'applet : profil, enveloppe, casque
-                   printf '%s\t%s\t%s\n' "$(actuel)" "$(enveloppe_actuelle)" "$(casque_actif)"
+                   printf '%s\t%s\t%s\n' "$(current_profile)" "$(current_envelope)" "$(current_headphone)"
                    exit 0 ;;
   -a) find "$HR" -maxdepth 1 -name '*.wav' ! -name 'hrir.wav' -printf '%f\n' \
         | sed 's/\.wav$//' | sort | column; exit 0 ;;
@@ -298,10 +330,10 @@ fi
 # Reserve aux profils que nous n'avons pas livres : charger numpy et scipy coute
 # environ un demi-seconde, ce qui ralentissait chaque bascule alors que les
 # fichiers HeSuVi sont connus et sains. On valide ce qu'on ne maitrise pas.
-CONNU=0
-[[ -f "$HR/.hesuvi" ]] && grep -qxF "$NEW" "$HR/.hesuvi" && CONNU=1
-if (( ! CONNU )) && python3 -c "import numpy, scipy.io" 2>/dev/null; then
-  VERDICT="$(python3 - "$HR/$NEW.wav" <<'CONTROLE'
+KNOWN=0
+[[ -f "$HR/.hesuvi" ]] && grep -qxF "$NEW" "$HR/.hesuvi" && KNOWN=1
+if (( ! KNOWN )) && python3 -c "import numpy, scipy.io" 2>/dev/null; then
+  VERDICT="$(python3 - "$HR/$NEW.wav" <<'CHECK'
 import sys, warnings
 warnings.filterwarnings("ignore")
 import numpy as np
@@ -317,10 +349,10 @@ x = a.astype(np.float64) if not np.issubdtype(a.dtype, np.integer) \
 nf = int((~np.isfinite(x)).sum())
 if nf:
     print(f"{nf} echantillon(s) non finis (NaN ou infini)"); sys.exit(0)
-crete = float(np.abs(x).max())
-if crete > 8.0:
-    print(f"crete a {crete:.3g}, hors de toute plage plausible")
-CONTROLE
+peak = float(np.abs(x).max())
+if peak > 8.0:
+    print(f"crete a {peak:.3g}, hors de toute plage plausible")
+CHECK
 )"
   if [[ -n "$VERDICT" ]]; then
     echo "« $NEW » est inexploitable : $VERDICT" >&2
@@ -331,12 +363,12 @@ CONTROLE
 fi
 
 echo "$NEW" > "$BASE_F"
-appliquer
-recharger
+rebuild_hrir
+reload_chain
 if [[ -n "${INFO[$NEW]+x}" ]]; then
   IFS='|' read -r us lat rev note <<<"${INFO[$NEW]}"
   printf 'Profil actif : \033[1m%s\033[0m (%s, lat. +%sdB, reverb %sms — %s)\n' \
-    "$NEW" "$us" "$lat" "$rev" "$(traduire "$note")"
+    "$NEW" "$(translate "$us")" "$lat" "$rev" "$(translate "$note")"
 else
   printf 'Profil actif : \033[1m%s\033[0m\n' "$NEW"
 fi
