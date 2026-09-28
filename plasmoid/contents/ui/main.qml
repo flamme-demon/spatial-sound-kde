@@ -21,6 +21,8 @@ PlasmoidItem {
     property int enveloppe: 0
     property bool enveloppeDispo: false
     property string indiceRecherche: ""
+    // Derniere sortie de --sync, reference du polling rapide.
+    property string dernierEtat: ""
 
     // En deca de ce seuil, une recherche renverrait des centaines d'entrees sans
     // interet et lancerait un processus a chaque frappe.
@@ -96,6 +98,11 @@ PlasmoidItem {
                 modeleCasques.append({ nom: c[0] });
             }
         });
+        // Reference du polling a jour : sans cela, le cycle suivant verrait un
+        // changement et rechargerait tout une seconde fois.
+        shell.lancer("--sync", function (sortie) {
+            root.dernierEtat = sortie;
+        });
     }
 
     // Champ vide : on montre ce qui est deja telecharge. Des qu'on tape, on
@@ -168,6 +175,25 @@ PlasmoidItem {
 
     Component.onCompleted: rafraichir()
 
+    // Un changement fait depuis le terminal doit apparaitre aussitot. --sync
+    // renvoie une ligne compacte (profil, enveloppe, casque) qu'on compare a la
+    // precedente : le modele complet n'est recharge que si elle a change.
+    Timer {
+        interval: 500; running: true; repeat: true
+        onTriggered: {
+            if (root.occupe) return;
+            shell.lancer("--sync", function (sortie) {
+                if (sortie !== root.dernierEtat) {
+                    root.dernierEtat = sortie;
+                    root.rafraichir();
+                }
+            });
+        }
+    }
+
+    // --sync ne voit ni l'etat du sink, ni un profil depose dans le dossier,
+    // ni le generateur installe apres coup : un rechargement complet periodique
+    // reste necessaire pour ceux-la.
     Timer {
         interval: 30000; running: true; repeat: true
         onTriggered: if (!root.occupe) root.rafraichir()

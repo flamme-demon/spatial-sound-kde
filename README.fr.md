@@ -102,6 +102,7 @@ surround-profil              # liste, avec les mesures
 surround-profil cmss_game    # bascule (~0,1 s, sans couper les autres sons)
 surround-profil -a           # tous les profils presents
 surround-profil --data       # sortie TSV, utilisée par l'applet
+surround-profil --sync       # état compact, interrogé par l'applet toutes les 500 ms
 ```
 
 Les profils ne se valent pas, et **leur réputation ne correspond pas à leur
