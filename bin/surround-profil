@@ -137,6 +137,12 @@ current_headphone() { basename "$(readlink -f "$HP/hpcf.wav" 2>/dev/null || echo
 # Repli sur le redemarrage complet pour les installations d'avant le service.
 reload_chain() {
   if [[ -f "$HOME/.config/systemd/user/spatial-sound.service" ]]; then
+    # Au-dela de 5 demarrages en 10 s, systemd refuse de relancer le service :
+    # comparer des profils a l'oreille suffit a l'atteindre, et plus aucun son
+    # ne sort jusqu'a une intervention manuelle. Un redemarrage demande ici est
+    # voulu : on remet le compteur a zero. Les relances automatiques apres un
+    # plantage restent, elles, bornees.
+    systemctl --user reset-failed spatial-sound.service 2>/dev/null || true
     systemctl --user restart spatial-sound.service
     for _ in $(seq 40); do
       contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK" && break

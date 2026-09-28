@@ -693,6 +693,10 @@ if (( LEGACY_FOUND )) || [[ ! "$(pactl list sinks short 2>/dev/null)" == *"$SINK
       && yellow "  entree par defaut restauree : $SOURCE_BEFORE"
   fi
 fi
+# Un service bloque par la limite de demarrages de systemd (bascules trop
+# rapprochees avec une version anterieure) refuserait de repartir : relancer
+# l'installation doit suffire a retrouver le son.
+systemctl --user reset-failed spatial-sound.service 2>/dev/null || true
 systemctl --user enable --now spatial-sound.service 2>/dev/null \
   || yellow "  systemctl a echoue — deconnecte/reconnecte ta session."
 systemctl --user restart spatial-sound.service 2>/dev/null || true
