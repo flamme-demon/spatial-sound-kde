@@ -1,6 +1,6 @@
 [package]
 name = "spatial-sound-gen"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Synthetise des reponses impulsionnelles binaurales de salle (BRIR) au format HeSuVi 14 canaux"
 license = "MIT"
