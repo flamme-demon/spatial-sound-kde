@@ -69,7 +69,7 @@ service and verifies that the sink appears.
 
 | Option | Effect |
 |---|---|
-| `--profile <name>` | initial profile (default: `cmss_game`) |
+| `--profile <name>` | profile to apply (default: the current one on reinstall, else `cmss_game`) |
 | `--hrir-dir <path>` | use local HeSuVi WAVs instead of downloading |
 | `--no-default-sink` | do not make the virtual sink the default output |
 | `--no-deps` | install nothing through pacman |

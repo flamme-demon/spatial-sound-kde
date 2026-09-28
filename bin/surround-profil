@@ -303,6 +303,9 @@ case "${1-}" in
                    current_envelope; exit 0 ;;
   --envelope-available|--enveloppe-dispo)
                    [[ -x "$GEN" ]] && echo 1 || echo 0; exit 0 ;;
+  --rebuild)       # Pour install.sh : remet hrir.wav en accord avec .base et
+                   # l'enveloppe, sans recharger la chaine qu'il redemarre lui-meme.
+                   rebuild_hrir; exit 0 ;;
   --status)        contains "$(pactl list sinks short 2>/dev/null || true)" "$SINK" \
                      && { echo actif; exit 0; } || { echo inactif; exit 1; } ;;
   --sync)          # Etat compact pour le polling de l'applet : profil, enveloppe, casque

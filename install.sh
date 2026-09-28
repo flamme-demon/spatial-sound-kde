@@ -59,22 +59,23 @@ LEGACY_STATE="${XDG_DATA_HOME:-$HOME/.local/share}/pipewire/pw-surround.state"
 
 HRIR_REPO="https://github.com/loteran/arctis-virtual-surround.git"
 DEFAULT_PROFILE="cmss_game"
+PROFILE_GIVEN=0
 SET_DEFAULT_SINK=1
 INSTALL_DEPS=1
 ASSUME_YES=0
 HRIR_LOCAL=""
 
-red()  { printf '\033[31m%s\033[0m\n' "$*"; }
-green()   { printf '\033[32m%s\033[0m\n' "$*"; }
-yellow()  { printf '\033[33m%s\033[0m\n' "$*"; }
+red()    { printf '\033[31m%s\033[0m\n' "$*"; }
+green()  { printf '\033[32m%s\033[0m\n' "$*"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 title()  { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
-die() { red "ERREUR : $*"; exit 1; }
+die()    { red "ERREUR : $*"; exit 1; }
 
 usage() {
   cat <<EOF
 Usage : ./install.sh [options]
 
-  --profile <nom>    profil HRIR initial (defaut : $DEFAULT_PROFILE)
+  --profile <nom>    profil HRIR a appliquer (defaut : celui en place, sinon $DEFAULT_PROFILE)
   --hrir-dir <chem>  utilise un dossier de WAV HeSuVi local au lieu de telecharger
   --no-default-sink  n'impose pas le sink virtuel comme sortie par defaut
   --no-deps          n'installe aucune dependance via pacman
@@ -90,7 +91,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     # --profil : nom de l'option avant la 1.1, garde en alias.
-    --profile|--profil) DEFAULT_PROFILE="$2"; shift 2 ;;
+    --profile|--profil) DEFAULT_PROFILE="$2"; PROFILE_GIVEN=1; shift 2 ;;
     --hrir-dir)        HRIR_LOCAL="$2"; shift 2 ;;
     --no-default-sink) SET_DEFAULT_SINK=0; shift ;;
     --no-deps)         INSTALL_DEPS=0; shift ;;
@@ -233,6 +234,24 @@ is_14ch() {
         -of csv=p=0 "$f" 2>/dev/null)" == "14" ]]
 }
 
+# Une reinstallation garde le profil en place, sauf --profile explicite. Sans
+# cela, hrir.wav repartait sur le profil par defaut alors que .base designait
+# toujours l'ancien : l'applet affichait un profil qui n'etait plus celui qu'on
+# entendait. Sans .base (installations d'avant la 0.3), on lit la cible de
+# hrir.wav ; un fichier cache y serait un derive, pas un profil.
+KEPT_PROFILE=0
+if (( ! PROFILE_GIVEN )); then
+  if [[ -f "$HRIR_DIR/.base" ]]; then
+    current="$(cat "$HRIR_DIR/.base")"
+  else
+    current="$(basename "$(readlink -f "$HRIR_DIR/hrir.wav" 2>/dev/null || true)" .wav)"
+  fi
+  if [[ -n "$current" && "$current" != .* && "$current" != hrir \
+        && -f "$HRIR_DIR/$current.wav" ]] && is_14ch "$HRIR_DIR/$current.wav"; then
+    DEFAULT_PROFILE="$current"; KEPT_PROFILE=1
+  fi
+fi
+
 if [[ ! -f "$HRIR_DIR/$DEFAULT_PROFILE.wav" ]] || ! is_14ch "$HRIR_DIR/$DEFAULT_PROFILE.wav"; then
   yellow "  '$DEFAULT_PROFILE' absent ou non 14 canaux, recherche d'un remplacant..."
   for c in cmss_game sonic atmos dtshx EAC_Default; do
@@ -248,8 +267,14 @@ fi
 [[ -f "$PROJECT_DIR/share/hesuvi-profiles.txt" ]] \
   && install -m644 "$PROJECT_DIR/share/hesuvi-profiles.txt" "$HRIR_DIR/.hesuvi"
 
+# .base et hrir.wav vont ensemble : l'applet lit l'un, PipeWire l'autre.
 ln -sfn "$HRIR_DIR/$DEFAULT_PROFILE.wav" "$HRIR_DIR/hrir.wav"
-green "  profil initial : $DEFAULT_PROFILE"
+echo "$DEFAULT_PROFILE" > "$HRIR_DIR/.base"
+if (( KEPT_PROFILE )); then
+  green "  profil conserve : $DEFAULT_PROFILE"
+else
+  green "  profil initial : $DEFAULT_PROFILE"
+fi
 
 # -------------------------------------------------- correction de casque (HpCF)
 title "Correction de casque"
@@ -528,6 +553,16 @@ if [[ -d "$PROJECT_DIR/gen" ]]; then
   else
     yellow "  cargo absent : reglage de reverberation indisponible"
   fi
+fi
+
+# hrir.wav vient d'etre relie au profil brut : on le reconstruit avec l'enveloppe
+# reglee avant la reinstallation. surround-profil est seul a savoir l'appliquer,
+# et le generateur doit deja etre en place.
+if "$BIN_DIR/surround-profil" --rebuild; then
+  ENV_NOW="$("$BIN_DIR/surround-profil" --envelope-current)"
+  if [[ "$ENV_NOW" != 0 ]]; then green "  enveloppe conservee : $ENV_NOW %"; fi
+else
+  yellow "  enveloppe non reappliquee — profil utilise sans amortissement"
 fi
 
 case ":$PATH:" in

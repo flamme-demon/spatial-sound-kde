@@ -69,7 +69,7 @@ Options utiles :
 
 | Option | Effet |
 |---|---|
-| `--profile <nom>` | profil initial (défaut : `cmss_game`) |
+| `--profile <nom>` | profil à appliquer (défaut : celui en place lors d'une réinstallation, sinon `cmss_game`) |
 | `--hrir-dir <chemin>` | utilise des WAV HeSuVi locaux au lieu de télécharger |
 | `--no-default-sink` | n'impose pas le sink virtuel comme sortie par défaut |
 | `--no-deps` | n'installe rien via pacman |
